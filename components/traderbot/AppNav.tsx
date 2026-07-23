@@ -54,15 +54,22 @@ export default function AppNav() {
   };
 
   return (
-    <nav className="bg-slate-950 border-b border-slate-800 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex justify-between items-center">
+    <nav className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-8 py-4">
+        {/* Logo */}
         <Link
-          href="/dashboard"
-          className="text-2xl font-bold text-white hover:text-blue-400 transition"
+          href={user ? "/dashboard" : "/"}
+          aria-label="TraderBot AI Home"
+          className="flex items-center gap-3 transition hover:opacity-90"
         >
-          🤖 TraderBot AI
+          <span className="text-3xl">🤖</span>
+
+          <h1 className="text-3xl font-bold text-white transition hover:text-blue-400">
+            TraderBot AI
+          </h1>
         </Link>
 
+        {/* Navigation */}
         <div className="flex items-center gap-6">
           {user &&
             links.map((link) => {
@@ -74,7 +81,7 @@ export default function AppNav() {
                   href={link.href}
                   className={`transition ${
                     active
-                      ? "text-blue-400 font-semibold"
+                      ? "font-semibold text-blue-400"
                       : "text-slate-300 hover:text-white"
                   }`}
                 >
@@ -87,14 +94,14 @@ export default function AppNav() {
             <>
               <Link
                 href="/login"
-                className="text-slate-300 hover:text-white"
+                className="text-slate-300 transition hover:text-white"
               >
                 Login
               </Link>
 
               <Link
                 href="/signup"
-                className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-white font-semibold"
+                className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white transition hover:bg-blue-700"
               >
                 Sign Up
               </Link>
@@ -107,7 +114,7 @@ export default function AppNav() {
 
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-white transition"
+                className="rounded-lg bg-red-600 px-4 py-2 text-white transition hover:bg-red-700"
               >
                 Logout
               </button>
