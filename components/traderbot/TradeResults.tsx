@@ -16,9 +16,11 @@ export default function TradeResults({ result }: Props) {
         </p>
       ) : (
         <div className="space-y-4">
-          {result.warning && (
-            <div className="bg-red-950 border border-red-700 text-red-200 p-4 rounded-lg">
-              {result.warning}
+          {result.warnings.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-red-700 bg-red-950 p-4 text-red-200">
+              {result.warnings.map((warning, index) => (
+                <p key={index}>{warning}</p>
+              ))}
             </div>
           )}
 
