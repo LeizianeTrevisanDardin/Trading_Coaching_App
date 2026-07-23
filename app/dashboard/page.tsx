@@ -1,23 +1,37 @@
 export default function DashboardPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+    <main className="min-h-screen bg-slate-950 p-8 text-white">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div>
+          <h1 className="text-4xl font-bold">Dashboard</h1>
 
-      <div className="grid md:grid-cols-4 gap-4">
-        <Card label="Today's P&L" value="$0.00" />
-        <Card label="Trades Today" value="0" />
-        <Card label="Win Rate" value="0%" />
-        <Card label="Risk Today" value="$0.00" />
+          <p className="mt-2 text-slate-400">
+            Track your daily trading performance and risk.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card label="Today&apos;s P&L" value="$0.00" />
+          <Card label="Trades Today" value="0" />
+          <Card label="Win Rate" value="0%" />
+          <Card label="Risk Used Today" value="$0.00" />
+        </div>
       </div>
     </main>
   );
 }
 
-function Card({ label, value }: { label: string; value: string }) {
+type CardProps = {
+  label: string;
+  value: string;
+};
+
+function Card({ label, value }: CardProps) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-      <p className="text-slate-400">{label}</p>
-      <p className="text-2xl font-bold mt-2">{value}</p>
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <p className="text-sm text-slate-400">{label}</p>
+
+      <p className="mt-2 text-3xl font-bold">{value}</p>
     </div>
   );
 }

@@ -1,20 +1,33 @@
 export default function SettingsPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+    <main className="min-h-screen bg-slate-950 p-8 text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold">Settings</h1>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 max-w-xl">
-        <Setting label="Default Contract" value="STOCK" />
-        <Setting label="Default Risk" value="1%" />
-        <Setting label="Default Reward" value="1:2" />
+          <p className="mt-2 text-slate-400">
+            Manage your default trading preferences.
+          </p>
+        </div>
+
+        <div className="max-w-xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <Setting label="Default Contract" value="STOCK" />
+          <Setting label="Default Risk" value="1%" />
+          <Setting label="Default Risk-to-Reward" value="1:2" />
+        </div>
       </div>
     </main>
   );
 }
 
-function Setting({ label, value }: { label: string; value: string }) {
+type SettingProps = {
+  label: string;
+  value: string;
+};
+
+function Setting({ label, value }: SettingProps) {
   return (
-    <div className="flex justify-between bg-slate-800 rounded-lg p-4">
+    <div className="flex items-center justify-between rounded-lg bg-slate-800 p-4">
       <span className="text-slate-400">{label}</span>
       <span className="font-bold">{value}</span>
     </div>

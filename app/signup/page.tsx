@@ -14,12 +14,12 @@ export default function SignupPage() {
 
   const handleSignup = async () => {
     if (!email || !password) {
-      alert("Preencha email e senha.");
+      alert("Please enter your email and password.");
       return;
     }
 
     if (password.length < 6) {
-      alert("A senha precisa ter pelo menos 6 caracteres.");
+      alert("Your password must be at least 6 characters long.");
       return;
     }
 
@@ -37,42 +37,46 @@ export default function SignupPage() {
       return;
     }
 
-    alert("Conta criada! Agora faça login.");
-    router.push("/login");
+    router.push("/dashboard");
   };
 
   return (
-    <section className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
-        <h1 className="text-3xl font-bold">Criar conta</h1>
+    <section className="flex min-h-screen items-center justify-center bg-gray-950 p-6 text-white">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-gray-800 bg-gray-900 p-6">
+        <h1 className="text-3xl font-bold">Create Account</h1>
 
         <input
-          className="w-full p-3 rounded bg-gray-800"
+          type="email"
+          className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
 
         <input
-          className="w-full p-3 rounded bg-gray-800"
-          placeholder="Senha"
           type="password"
+          className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
         <button
+          type="button"
           onClick={handleSignup}
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 rounded-xl p-3 font-bold"
+          className="w-full rounded-xl bg-blue-600 p-3 font-bold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Criando..." : "Criar conta"}
+          {loading ? "Creating Account..." : "Create Account"}
         </button>
 
-        <p className="text-gray-400 text-sm">
-          Já tem conta?{" "}
-          <Link href="/login" className="text-blue-400">
-            Entrar
+        <p className="text-sm text-gray-400">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="text-blue-400 hover:text-blue-300"
+          >
+            Sign In
           </Link>
         </p>
       </div>

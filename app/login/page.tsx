@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      alert("Preencha email e senha.");
+      alert("Please enter your email and password.");
       return;
     }
 
@@ -36,21 +36,22 @@ export default function LoginPage() {
   };
 
   return (
-    <section className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
-        <h1 className="text-3xl font-bold">Login</h1>
+    <section className="flex min-h-screen items-center justify-center bg-gray-950 p-6 text-white">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-gray-800 bg-gray-900 p-6">
+        <h1 className="text-3xl font-bold">Sign In</h1>
 
         <input
-          className="w-full p-3 rounded bg-gray-800"
+          className="w-full rounded-xl bg-gray-800 p-3"
+          type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
 
         <input
-          className="w-full p-3 rounded bg-gray-800"
-          placeholder="Senha"
+          className="w-full rounded-xl bg-gray-800 p-3"
           type="password"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
@@ -58,15 +59,18 @@ export default function LoginPage() {
         <button
           onClick={handleLogin}
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 rounded-xl p-3 font-bold"
+          className="w-full rounded-xl bg-blue-600 p-3 font-bold transition hover:bg-blue-700 disabled:opacity-60"
         >
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? "Signing In..." : "Sign In"}
         </button>
 
-        <p className="text-gray-400 text-sm">
-          Não tem conta?{" "}
-          <Link href="/signup" className="text-blue-400">
-            Criar conta
+        <p className="text-sm text-gray-400">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/signup"
+            className="text-blue-400 hover:text-blue-300"
+          >
+            Create an account
           </Link>
         </p>
       </div>

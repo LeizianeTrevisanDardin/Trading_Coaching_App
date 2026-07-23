@@ -4,10 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-type Trend = "alta" | "baixa" | "consolidacao";
+type Trend = "uptrend" | "downtrend" | "consolidation";
 type Direction = "long" | "short" | "wait";
-type CandleSignal = "forca" | "rejeicao" | "indecisao";
-type CaptureMoment = "pre_trade" | "after_entry" | "in_trade" | "post_trade";
+type CandleSignal = "strength" | "rejection" | "indecision";
+
+type CaptureMoment =
+  | "pre_trade"
+  | "after_entry"
+  | "in_trade"
+  | "post_trade";
 
 export default function ScreenshotAnalysisPage() {
   const router = useRouter();
@@ -15,14 +20,22 @@ export default function ScreenshotAnalysisPage() {
   const [file, setFile] = useState<File | null>(null);
   const [symbol, setSymbol] = useState("");
   const [timeframe, setTimeframe] = useState("1m");
-  const [captureMoment, setCaptureMoment] = useState<CaptureMoment>("pre_trade");
-  const [trend, setTrend] = useState<Trend>("alta");
+
+  const [captureMoment, setCaptureMoment] =
+    useState<CaptureMoment>("pre_trade");
+
+  const [trend, setTrend] = useState<Trend>("uptrend");
   const [swingHigh, setSwingHigh] = useState("");
   const [swingLow, setSwingLow] = useState("");
   const [breakout, setBreakout] = useState(false);
   const [retest, setRetest] = useState(false);
-  const [candleSignal, setCandleSignal] = useState<CandleSignal>("forca");
-  const [direction, setDirection] = useState<Direction>("wait");
+
+  const [candleSignal, setCandleSignal] =
+    useState<CandleSignal>("strength");
+
+  const [direction, setDirection] =
+    useState<Direction>("wait");
+
   const [entryPrice, setEntryPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [targetPrice, setTargetPrice] = useState("");
@@ -34,7 +47,9 @@ export default function ScreenshotAnalysisPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) router.push("/login");
+      if (!user) {
+        router.push("/login");
+      }
     };
 
     checkUser();
@@ -58,78 +73,146 @@ export default function ScreenshotAnalysisPage() {
     let modeAdvice = "";
 
     if (captureMoment === "pre_trade") {
-      modeAdvice = "📸 Pré-trade: avaliando se o setup merece entrada.";
+      modeAdvice =
+        "📸 Pre-trade: evaluating whether the setup is worth entering.";
     }
 
     if (captureMoment === "after_entry") {
-      modeAdvice = "📈 Após entrada: avaliando se a operação ainda respeita o plano.";
+      modeAdvice =
+        "📈 After entry: evaluating whether the trade still follows the original plan.";
     }
 
     if (captureMoment === "in_trade") {
-      modeAdvice = "🛡️ Durante a trade: foco em proteger o risco e respeitar o stop.";
+      modeAdvice =
+        "🛡️ During the trade: focus on protecting your risk and respecting the stop loss.";
     }
 
     if (captureMoment === "post_trade") {
-      modeAdvice = "📚 Pós-trade: revisão para aprender com a operação.";
+      modeAdvice =
+        "📚 Post-trade: reviewing the trade to identify lessons and improvements.";
     }
 
-    if (trend === "alta" && direction === "long") {
+    if (trend === "uptrend" && direction === "long") {
       breakdown.trend = 20;
-      positives.push("Tendência de alta combina com entrada Long.");
+
+      positives.push(
+        "The uptrend supports the Long direction."
+      );
     }
 
-    if (trend === "baixa" && direction === "short") {
+    if (trend === "downtrend" && direction === "short") {
       breakdown.trend = 20;
-      positives.push("Tendência de baixa combina com entrada Short.");
+
+      positives.push(
+        "The downtrend supports the Short direction."
+      );
+    }
+
+    if (
+      trend === "uptrend" &&
+      direction === "short"
+    ) {
+      breakdown.trend = -10;
+
+      warnings.push(
+        "The Short direction is against the current uptrend."
+      );
+    }
+
+    if (
+      trend === "downtrend" &&
+      direction === "long"
+    ) {
+      breakdown.trend = -10;
+
+      warnings.push(
+        "The Long direction is against the current downtrend."
+      );
     }
 
     if (direction === "wait") {
-      warnings.push("Direção está como Aguardar, então o setup ainda não é uma entrada confirmada.");
+      warnings.push(
+        "Direction is set to Wait, so the setup is not yet a confirmed entry."
+      );
     }
 
-    if (trend === "consolidacao") {
+    if (trend === "consolidation") {
       breakdown.trend = -10;
-      warnings.push("Mercado em consolidação aumenta o risco.");
+
+      warnings.push(
+        "Market consolidation increases the risk of false breakouts."
+      );
     }
 
     if (swingHigh && swingLow) {
       breakdown.structure = 15;
-      positives.push("Estrutura com Swing High e Swing Low definidos.");
+
+      positives.push(
+        "The market structure has defined Swing High and Swing Low levels."
+      );
     } else {
-      warnings.push("Swing High ou Swing Low ainda não foram preenchidos.");
+      warnings.push(
+        "Swing High or Swing Low has not been entered."
+      );
     }
 
     if (breakout) {
       breakdown.breakout = 20;
-      positives.push("Breakout confirmado.");
+
+      positives.push(
+        "Breakout has been confirmed."
+      );
     } else {
-      warnings.push("Ainda não houve breakout confirmado.");
+      warnings.push(
+        "There is no confirmed breakout yet."
+      );
     }
 
     if (retest) {
       breakdown.retest = 20;
-      positives.push("Reteste confirmado, entrada mais conservadora.");
-    } else if (breakout && candleSignal === "forca") {
+
+      positives.push(
+        "Retest confirmed, providing a more conservative entry."
+      );
+    } else if (
+      breakout &&
+      candleSignal === "strength"
+    ) {
       breakdown.retest = 5;
-      warnings.push("Sem reteste: setup mais agressivo, estilo breakout de continuação.");
+
+      warnings.push(
+        "There is no retest. This is a more aggressive continuation breakout setup."
+      );
     } else {
       breakdown.retest = -10;
-      warnings.push("Sem reteste e sem confirmação forte, entrada mais arriscada.");
+
+      warnings.push(
+        "There is no retest or strong confirmation, making the entry riskier."
+      );
     }
 
-    if (candleSignal === "forca") {
+    if (candleSignal === "strength") {
       breakdown.candle = 15;
-      positives.push("Candle de força confirma pressão na direção da operação.");
+
+      positives.push(
+        "A strong candle confirms pressure in the trade direction."
+      );
     }
 
-    if (candleSignal === "rejeicao") {
+    if (candleSignal === "rejection") {
       breakdown.candle = 10;
-      positives.push("Candle de rejeição mostra defesa de preço.");
+
+      positives.push(
+        "The rejection candle shows price defense at an important level."
+      );
     }
 
-    if (candleSignal === "indecisao") {
+    if (candleSignal === "indecision") {
       breakdown.candle = -10;
-      warnings.push("Candle de indecisão reduz a confiança.");
+
+      warnings.push(
+        "An indecision candle reduces confidence in the setup."
+      );
     }
 
     const entry = Number(entryPrice);
@@ -140,22 +223,43 @@ export default function ScreenshotAnalysisPage() {
 
     if (entry && stop && target) {
       const risk = Math.abs(entry - stop);
-      const reward = Math.abs(target - entry);
+      const potentialReward = Math.abs(target - entry);
 
-      rr = reward / risk;
+      if (risk > 0) {
+        rr = potentialReward / risk;
 
-      if (rr >= 2) {
-        breakdown.riskReward = 15;
-        positives.push(`Risco/retorno bom: ${rr.toFixed(2)}R.`);
-      } else if (rr >= 1.5) {
-        breakdown.riskReward = 5;
-        warnings.push(`Risco/retorno aceitável, mas não ideal: ${rr.toFixed(2)}R.`);
+        if (rr >= 2) {
+          breakdown.riskReward = 15;
+
+          positives.push(
+            `Good risk-to-reward ratio: ${rr.toFixed(2)}R.`
+          );
+        } else if (rr >= 1.5) {
+          breakdown.riskReward = 5;
+
+          warnings.push(
+            `The risk-to-reward ratio is acceptable but not ideal: ${rr.toFixed(
+              2
+            )}R.`
+          );
+        } else {
+          breakdown.riskReward = -15;
+
+          warnings.push(
+            `Weak risk-to-reward ratio: ${rr.toFixed(2)}R.`
+          );
+        }
       } else {
         breakdown.riskReward = -15;
-        warnings.push(`Risco/retorno fraco: ${rr.toFixed(2)}R.`);
+
+        warnings.push(
+          "Entry and stop loss cannot be the same price."
+        );
       }
     } else {
-      warnings.push("Entrada, stop ou alvo ainda não preenchidos.");
+      warnings.push(
+        "Entry price, stop loss, or target price has not been entered."
+      );
     }
 
     score =
@@ -166,87 +270,122 @@ export default function ScreenshotAnalysisPage() {
       breakdown.candle +
       breakdown.riskReward;
 
-    score = Math.max(0, Math.min(100, score));
-
-    let setupType = "Setup indefinido";
-
-    if (breakout && retest) setupType = "Breakout + Reteste";
-    else if (breakout && !retest && candleSignal === "forca") setupType = "Breakout de Continuação";
-    else if (!breakout && candleSignal === "rejeicao") setupType = "Rejeição / possível reversão";
-
-    let decision = "⏳ Aguardar";
-
-    if (score >= 75) {
-        decision =
-            captureMoment === "in_trade"
-            ? "🛡️ Trade válida, mas precisa gestão"
-            : "✅ Setup forte";
-        }
-    else if (score >= 50) decision = "🟡 Setup válido, mas precisa cuidado";
-    else decision = "❌ Melhor evitar";
-
     let managementAdvice = "";
 
-        if (captureMoment === "in_trade") {
-        if (retest && breakout && direction === "long") {
-            managementAdvice =
-            "Gestão: a operação ainda depende da defesa do suporte/reteste. Não aumente posição. Não mova o stop para baixo. Aguarde confirmação acima da região do reteste.";
-        }
+    if (captureMoment === "in_trade") {
+      if (
+        retest &&
+        breakout &&
+        direction === "long"
+      ) {
+        managementAdvice =
+          "Trade management: the setup still depends on buyers defending the support or retest area. Do not increase your position. Do not move your stop loss lower. Wait for confirmation above the retest area.";
+      }
 
-        if (rr > 0 && rr < 2) {
-            warnings.push(
-            `Como a trade está em andamento e o RR é ${rr.toFixed(
-                2
-            )}R, a nota foi reduzida porque o risco/retorno está abaixo do ideal.`
-            );
+      if (
+        retest &&
+        breakout &&
+        direction === "short"
+      ) {
+        managementAdvice =
+          "Trade management: the setup still depends on sellers defending the resistance or retest area. Do not increase your position. Do not move your stop loss higher. Wait for confirmation below the retest area.";
+      }
 
-            score -= 10;
-        }
+      if (rr > 0 && rr < 2) {
+        warnings.push(
+          `Because the trade is already active and the risk-to-reward ratio is ${rr.toFixed(
+            2
+          )}R, the score was reduced because the reward does not fully justify the risk.`
+        );
 
-        if (score > 90) {
-            score = 88;
-        }
-        }
+        score -= 10;
+      }
 
-        let aiSummary = "";
+      if (score > 90) {
+        score = 88;
+      }
+    }
 
-        if (score >= 75) {
-        aiSummary = "Setup de qualidade, com boa estrutura de Price Action.";
-        } else if (score >= 50) {
-        aiSummary = "Setup válido, mas ainda possui pontos de atenção.";
-        } else {
-        aiSummary = "Setup fraco. Melhor evitar ou aguardar nova confirmação.";
-        }
+    score = Math.max(0, Math.min(100, score));
 
-        let lesson = "";
+    let setupType = "Undefined Setup";
 
-        if (captureMoment === "in_trade") {
-        lesson =
-            "Mesmo um bom setup pode falhar. O mais importante é respeitar o stop e não aumentar risco durante a operação.";
-        } else if (captureMoment === "pre_trade") {
-        lesson =
-            "A melhor entrada costuma acontecer quando tendência, estrutura, reteste e risco/retorno estão alinhados.";
-        } else {
-        lesson =
-            "Revise se você seguiu o plano e se a entrada respeitou sua estratégia.";
-        }
+    if (breakout && retest) {
+      setupType = "Breakout and Retest";
+    } else if (
+      breakout &&
+      !retest &&
+      candleSignal === "strength"
+    ) {
+      setupType = "Continuation Breakout";
+    } else if (
+      !breakout &&
+      candleSignal === "rejection"
+    ) {
+      setupType = "Rejection / Possible Reversal";
+    }
 
-   return {
-  score,
-  decision,
-  setupType,
-  positives,
-  warnings,
-  breakdown,
-  managementAdvice,
-  rr,
-  modeAdvice,
-  aiSummary,
-  lesson,
-  text: `${decision}. ${modeAdvice} Tipo: ${setupType}. ${aiSummary} Pontos positivos: ${positives.join(
-    " "
-  )} Pontos de atenção: ${warnings.join(" ")} Lição: ${lesson}`,
-};
+    let decision = "⏳ Wait";
+
+    if (score >= 75) {
+      decision =
+        captureMoment === "in_trade"
+          ? "🛡️ Valid trade, but management is required"
+          : "✅ Strong Setup";
+    } else if (score >= 50) {
+      decision =
+        "🟡 Valid setup, but caution is required";
+    } else {
+      decision = "❌ Better to Avoid";
+    }
+
+    let aiSummary = "";
+
+    if (score >= 75) {
+      aiSummary =
+        "This is a high-quality setup with strong Price Action structure.";
+    } else if (score >= 50) {
+      aiSummary =
+        "This is a valid setup, but it still has important points of concern.";
+    } else {
+      aiSummary =
+        "This is a weak setup. It may be better to avoid the trade or wait for additional confirmation.";
+    }
+
+    let lesson = "";
+
+    if (captureMoment === "in_trade") {
+      lesson =
+        "Even a good setup can fail. The most important rule is to respect the stop loss and never increase risk while the trade is active.";
+    } else if (captureMoment === "pre_trade") {
+      lesson =
+        "The best entries usually occur when trend, market structure, retest, confirmation, and risk-to-reward are aligned.";
+    } else if (captureMoment === "after_entry") {
+      lesson =
+        "After entering, avoid changing the original plan because of fear or excitement. Manage the trade according to your predefined risk.";
+    } else {
+      lesson =
+        "Review whether you followed your trading plan and whether the entry respected your strategy.";
+    }
+
+    return {
+      score,
+      decision,
+      setupType,
+      positives,
+      warnings,
+      breakdown,
+      managementAdvice,
+      rr,
+      modeAdvice,
+      aiSummary,
+      lesson,
+      text: `${decision}. ${modeAdvice} Setup type: ${setupType}. ${aiSummary} Strengths: ${positives.join(
+        " "
+      )} Warnings: ${warnings.join(
+        " "
+      )} Lesson: ${lesson}`,
+    };
   }, [
     captureMoment,
     trend,
@@ -269,23 +408,29 @@ export default function ScreenshotAnalysisPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      router.push("/login");
       setLoading(false);
+      router.push("/login");
       return;
     }
 
     let imageUrl = "";
 
     if (file) {
-      const fileName = `${user.id}/${Date.now()}-${file.name}`;
+      const safeFileName = file.name.replace(
+        /[^a-zA-Z0-9._-]/g,
+        "_"
+      );
 
-      const { error: uploadError } = await supabase.storage
-        .from("trade-screenshots")
-        .upload(fileName, file);
+      const fileName = `${user.id}/${Date.now()}-${safeFileName}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("trade-screenshots")
+          .upload(fileName, file);
 
       if (uploadError) {
-        alert(uploadError.message);
         console.error(uploadError);
+        alert(uploadError.message);
         setLoading(false);
         return;
       }
@@ -300,19 +445,29 @@ export default function ScreenshotAnalysisPage() {
     const newScreenshot = {
       user_id: user.id,
       image_url: imageUrl,
-      symbol,
+      symbol: symbol.trim().toUpperCase(),
       timeframe,
       capture_moment: captureMoment,
       trend,
-      swing_high: swingHigh ? Number(swingHigh) : null,
-      swing_low: swingLow ? Number(swingLow) : null,
+      swing_high: swingHigh
+        ? Number(swingHigh)
+        : null,
+      swing_low: swingLow
+        ? Number(swingLow)
+        : null,
       breakout,
       retest,
       candle_signal: candleSignal,
       direction,
-      entry_price: entryPrice ? Number(entryPrice) : null,
-      stop_loss: stopLoss ? Number(stopLoss) : null,
-      target_price: targetPrice ? Number(targetPrice) : null,
+      entry_price: entryPrice
+        ? Number(entryPrice)
+        : null,
+      stop_loss: stopLoss
+        ? Number(stopLoss)
+        : null,
+      target_price: targetPrice
+        ? Number(targetPrice)
+        : null,
       score: analysis.score,
       bot_analysis: analysis.text,
     };
@@ -322,242 +477,466 @@ export default function ScreenshotAnalysisPage() {
       .insert(newScreenshot);
 
     if (error) {
-      alert(error.message);
       console.error(error);
+      alert(error.message);
       setLoading(false);
       return;
     }
 
-    alert("Análise salva com sucesso!");
+    alert("Analysis saved successfully!");
     router.push("/analytics");
-    setLoading(false);
   };
 
+  return (
+    <section className="min-h-screen bg-gray-950 p-6 text-white">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">
+            Screenshot Analysis
+          </h1>
 
-  
-return (
-  <section className="min-h-screen bg-gray-950 text-white p-6">
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Análise por Screenshot</h1>
-        <p className="text-gray-400">
-          Envie o print do gráfico e preencha os pontos principais do Price Action.
-        </p>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full"
-          />
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Símbolo. Ex: AAPL, TSLA, SPY, MES"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-          />
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Timeframe. Ex: 1m, 5m"
-            value={timeframe}
-            onChange={(e) => setTimeframe(e.target.value)}
-          />
-
-          <select
-            className="w-full p-3 rounded bg-gray-800"
-            value={captureMoment}
-            onChange={(e) => setCaptureMoment(e.target.value as CaptureMoment)}
-          >
-            <option value="pre_trade">Antes da entrada</option>
-            <option value="after_entry">Após a entrada</option>
-            <option value="in_trade">Durante a operação</option>
-            <option value="post_trade">Após encerramento</option>
-          </select>
-
-          <select
-            className="w-full p-3 rounded bg-gray-800"
-            value={trend}
-            onChange={(e) => setTrend(e.target.value as Trend)}
-          >
-            <option value="alta">Tendência de Alta</option>
-            <option value="baixa">Tendência de Baixa</option>
-            <option value="consolidacao">Consolidação</option>
-          </select>
-
-          <select
-            className="w-full p-3 rounded bg-gray-800"
-            value={direction}
-            onChange={(e) => setDirection(e.target.value as Direction)}
-          >
-            <option value="wait">Aguardar</option>
-            <option value="long">Long / Compra</option>
-            <option value="short">Short / Venda</option>
-          </select>
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Swing High"
-            value={swingHigh}
-            onChange={(e) => setSwingHigh(e.target.value)}
-          />
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Swing Low"
-            value={swingLow}
-            onChange={(e) => setSwingLow(e.target.value)}
-          />
-
-          <label className="flex gap-2">
-            <input
-              type="checkbox"
-              checked={breakout}
-              onChange={(e) => setBreakout(e.target.checked)}
-            />
-            Teve breakout?
-          </label>
-
-          <label className="flex gap-2">
-            <input
-              type="checkbox"
-              checked={retest}
-              onChange={(e) => setRetest(e.target.checked)}
-            />
-            Teve reteste?
-          </label>
-
-          <select
-            className="w-full p-3 rounded bg-gray-800"
-            value={candleSignal}
-            onChange={(e) => setCandleSignal(e.target.value as CandleSignal)}
-          >
-            <option value="forca">Candle de força</option>
-            <option value="rejeicao">Candle de rejeição</option>
-            <option value="indecisao">Candle de indecisão</option>
-          </select>
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Entrada"
-            value={entryPrice}
-            onChange={(e) => setEntryPrice(e.target.value)}
-          />
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Stop Loss"
-            value={stopLoss}
-            onChange={(e) => setStopLoss(e.target.value)}
-          />
-
-          <input
-            className="w-full p-3 rounded bg-gray-800"
-            placeholder="Alvo"
-            value={targetPrice}
-            onChange={(e) => setTargetPrice(e.target.value)}
-          />
-
-          <button
-            onClick={handleSave}
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 rounded-xl p-3 font-bold"
-          >
-            {loading ? "Salvando..." : "Salvar Análise"}
-          </button>
+          <p className="mt-2 text-gray-400">
+            Upload a screenshot of your chart and enter the
+            key Price Action information.
+          </p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-5">
-          <h2 className="text-2xl font-bold">Resultado do TraderBot</h2>
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-4 rounded-2xl border border-gray-800 bg-gray-900 p-5">
+            <div>
+              <label className="mb-2 block text-sm text-gray-400">
+                Chart Screenshot
+              </label>
 
-          <div>
-            <div className="text-5xl font-bold">{analysis.score}/100</div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) =>
+                  setFile(e.target.files?.[0] || null)
+                }
+                className="w-full text-sm text-gray-300"
+              />
+            </div>
 
-            <p className="text-lg mt-2">{analysis.decision}</p>
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Symbol
+              </label>
 
-            <p className="text-blue-400 font-semibold mt-1">
-              📌 Setup: {analysis.setupType}
-            </p>
+              <input
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Example: AAPL, TSLA, SPY, MES"
+                value={symbol}
+                onChange={(e) =>
+                  setSymbol(e.target.value)
+                }
+              />
+            </div>
 
-            <p className="text-purple-400 font-semibold mt-2">
-              {analysis.modeAdvice}
-            </p>
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Timeframe
+              </label>
 
-            {analysis.managementAdvice && (
-              <div className="mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4">
-                <h3 className="font-bold text-orange-300">
-                  🛡️ Gestão da Trade
-                </h3>
+              <input
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Example: 1m, 5m, 15m"
+                value={timeframe}
+                onChange={(e) =>
+                  setTimeframe(e.target.value)
+                }
+              />
+            </div>
 
-                <p className="text-orange-100 mt-2 leading-relaxed">
-                  {analysis.managementAdvice}
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Screenshot Moment
+              </label>
+
+              <select
+                className="w-full rounded bg-gray-800 p-3"
+                value={captureMoment}
+                onChange={(e) =>
+                  setCaptureMoment(
+                    e.target.value as CaptureMoment
+                  )
+                }
+              >
+                <option value="pre_trade">
+                  Before Entry
+                </option>
+
+                <option value="after_entry">
+                  After Entry
+                </option>
+
+                <option value="in_trade">
+                  During Trade
+                </option>
+
+                <option value="post_trade">
+                  After Trade
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Market Trend
+              </label>
+
+              <select
+                className="w-full rounded bg-gray-800 p-3"
+                value={trend}
+                onChange={(e) =>
+                  setTrend(e.target.value as Trend)
+                }
+              >
+                <option value="uptrend">
+                  Uptrend
+                </option>
+
+                <option value="downtrend">
+                  Downtrend
+                </option>
+
+                <option value="consolidation">
+                  Consolidation
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Trade Direction
+              </label>
+
+              <select
+                className="w-full rounded bg-gray-800 p-3"
+                value={direction}
+                onChange={(e) =>
+                  setDirection(
+                    e.target.value as Direction
+                  )
+                }
+              >
+                <option value="wait">
+                  Wait
+                </option>
+
+                <option value="long">
+                  Long / Buy
+                </option>
+
+                <option value="short">
+                  Short / Sell
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Swing High
+              </label>
+
+              <input
+                type="number"
+                step="any"
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Enter the Swing High price"
+                value={swingHigh}
+                onChange={(e) =>
+                  setSwingHigh(e.target.value)
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Swing Low
+              </label>
+
+              <input
+                type="number"
+                step="any"
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Enter the Swing Low price"
+                value={swingLow}
+                onChange={(e) =>
+                  setSwingLow(e.target.value)
+                }
+              />
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-gray-800 p-3">
+              <input
+                type="checkbox"
+                checked={breakout}
+                onChange={(e) =>
+                  setBreakout(e.target.checked)
+                }
+                className="h-4 w-4"
+              />
+
+              <span>Was there a confirmed breakout?</span>
+            </label>
+
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-gray-800 p-3">
+              <input
+                type="checkbox"
+                checked={retest}
+                onChange={(e) =>
+                  setRetest(e.target.checked)
+                }
+                className="h-4 w-4"
+              />
+
+              <span>Was there a confirmed retest?</span>
+            </label>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Candle Signal
+              </label>
+
+              <select
+                className="w-full rounded bg-gray-800 p-3"
+                value={candleSignal}
+                onChange={(e) =>
+                  setCandleSignal(
+                    e.target.value as CandleSignal
+                  )
+                }
+              >
+                <option value="strength">
+                  Strength Candle
+                </option>
+
+                <option value="rejection">
+                  Rejection Candle
+                </option>
+
+                <option value="indecision">
+                  Indecision Candle
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Entry Price
+              </label>
+
+              <input
+                type="number"
+                step="any"
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Enter the planned or executed entry"
+                value={entryPrice}
+                onChange={(e) =>
+                  setEntryPrice(e.target.value)
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Stop Loss
+              </label>
+
+              <input
+                type="number"
+                step="any"
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Enter the stop-loss price"
+                value={stopLoss}
+                onChange={(e) =>
+                  setStopLoss(e.target.value)
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-gray-400">
+                Target Price
+              </label>
+
+              <input
+                type="number"
+                step="any"
+                className="w-full rounded bg-gray-800 p-3"
+                placeholder="Enter the target price"
+                value={targetPrice}
+                onChange={(e) =>
+                  setTargetPrice(e.target.value)
+                }
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={loading}
+              className="w-full rounded-xl bg-blue-600 p-3 font-bold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? "Saving Analysis..."
+                : "Save Analysis"}
+            </button>
+          </div>
+
+          <div className="space-y-5 rounded-2xl border border-gray-800 bg-gray-900 p-5">
+            <h2 className="text-2xl font-bold">
+              TraderBot Analysis
+            </h2>
+
+            <div>
+              <div className="text-5xl font-bold">
+                {analysis.score}/100
+              </div>
+
+              <p className="mt-2 text-lg">
+                {analysis.decision}
+              </p>
+
+              <p className="mt-1 font-semibold text-blue-400">
+                📌 Setup Type: {analysis.setupType}
+              </p>
+
+              <p className="mt-2 font-semibold text-purple-400">
+                {analysis.modeAdvice}
+              </p>
+
+              <p className="mt-3 leading-relaxed text-gray-300">
+                {analysis.aiSummary}
+              </p>
+
+              {analysis.managementAdvice && (
+                <div className="mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4">
+                  <h3 className="font-bold text-orange-300">
+                    🛡️ Trade Management
+                  </h3>
+
+                  <p className="mt-2 leading-relaxed text-orange-100">
+                    {analysis.managementAdvice}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="h-3 w-full rounded-full bg-gray-800">
+              <div
+                className="h-3 rounded-full bg-blue-600 transition-all"
+                style={{
+                  width: `${analysis.score}%`,
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {Object.entries(
+                analysis.breakdown
+              ).map(([key, value]) => (
+                <div
+                  key={key}
+                  className="rounded-xl bg-gray-800 p-3"
+                >
+                  <p className="capitalize text-gray-400">
+                    {formatBreakdownLabel(key)}
+                  </p>
+
+                  <p className="font-semibold">
+                    {value} points
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-bold text-green-400">
+                🟢 Strengths
+              </h3>
+
+              {analysis.positives.length > 0 ? (
+                <ul className="list-inside list-disc space-y-1 text-gray-300">
+                  {analysis.positives.map(
+                    (item, index) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              ) : (
+                <p className="text-gray-400">
+                  No strengths have been identified yet.
                 </p>
+              )}
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-bold text-yellow-400">
+                ⚠️ Warnings
+              </h3>
+
+              {analysis.warnings.length > 0 ? (
+                <ul className="list-inside list-disc space-y-1 text-gray-300">
+                  {analysis.warnings.map(
+                    (item, index) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              ) : (
+                <p className="text-gray-400">
+                  No warnings at this time.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+              <h3 className="font-bold text-blue-300">
+                📚 Trading Lesson
+              </h3>
+
+              <p className="mt-2 leading-relaxed text-blue-100">
+                {analysis.lesson}
+              </p>
+            </div>
+
+            {analysis.rr > 0 && (
+              <div className="flex items-center justify-between rounded-xl bg-gray-800 p-4">
+                <span className="text-gray-400">
+                  Risk-to-Reward
+                </span>
+
+                <span className="text-lg font-bold">
+                  1:{analysis.rr.toFixed(2)}
+                </span>
               </div>
             )}
-          </div>
 
-          <div className="w-full bg-gray-800 rounded-full h-3">
-            <div
-              className="bg-blue-600 h-3 rounded-full"
-              style={{ width: `${analysis.score}%` }}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {Object.entries(analysis.breakdown).map(([key, value]) => (
-              <div key={key} className="bg-gray-800 rounded-xl p-3">
-                <p className="text-gray-400 capitalize">{key}</p>
-                <p>{value} pts</p>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <h3 className="font-bold text-green-400 mb-2">
-              🟢 Pontos positivos
-            </h3>
-
-            {analysis.positives.length > 0 ? (
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {analysis.positives.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-400">Nenhum ponto positivo ainda.</p>
+            {file && (
+              <img
+                src={URL.createObjectURL(file)}
+                alt="Uploaded trading chart"
+                className="mt-4 w-full rounded-xl border border-gray-700"
+              />
             )}
           </div>
-
-          <div>
-            <h3 className="font-bold text-yellow-400 mb-2">
-              ⚠️ Pontos de atenção
-            </h3>
-
-            {analysis.warnings.length > 0 ? (
-              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                {analysis.warnings.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-400">Nenhum alerta no momento.</p>
-            )}
-          </div>
-
-          {file && (
-            <img
-              src={URL.createObjectURL(file)}
-              alt="Screenshot do gráfico"
-              className="rounded-xl border border-gray-700 mt-4"
-            />
-          )}
         </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+}
+
+function formatBreakdownLabel(key: string) {
+  const labels: Record<string, string> = {
+    trend: "Trend",
+    structure: "Structure",
+    breakout: "Breakout",
+    retest: "Retest",
+    candle: "Candle Signal",
+    riskReward: "Risk-to-Reward",
+  };
+
+  return labels[key] ?? key;
 }
