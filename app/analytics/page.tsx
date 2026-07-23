@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Direction = "long" | "short" | "wait";
+type DialogType = "success" | "error" | "warning" | "info";
 
 type ScreenshotAnalysis = {
   id: string;
@@ -34,6 +35,13 @@ type ContractData = {
   tickSize: number;
 };
 
+type DialogState = {
+  open: boolean;
+  type: DialogType;
+  title: string;
+  message: string;
+};
+
 const contractSettings: Record<string, ContractData> = {
   MES: {
     contract: "MES",
@@ -57,6 +65,13 @@ const contractSettings: Record<string, ContractData> = {
   },
 };
 
+const initialDialog: DialogState = {
+  open: false,
+  type: "info",
+  title: "",
+  message: "",
+};
+
 export default function AnalyticsPage() {
   const router = useRouter();
 
@@ -67,6 +82,29 @@ export default function AnalyticsPage() {
 
   const [loading, setLoading] = useState(true);
   const [addingToJournal, setAddingToJournal] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(initialDialog);
+  const [removeCandidate, setRemoveCandidate] =
+    useState<ScreenshotAnalysis | null>(null);
+
+  const showDialog = (
+    type: DialogType,
+    title: string,
+    message: string
+  ) => {
+    setDialog({
+      open: true,
+      type,
+      title,
+      message,
+    });
+  };
+
+  const closeDialog = () => {
+    setDialog((current) => ({
+      ...current,
+      open: false,
+    }));
+  };
 
   useEffect(() => {
     const loadAnalyses = async () => {
@@ -78,6 +116,7 @@ export default function AnalyticsPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
+        setLoading(false);
         router.push("/login");
         return;
       }
@@ -101,13 +140,24 @@ export default function AnalyticsPage() {
 
       if (analysesError) {
         console.error(analysesError);
-        alert(analysesError.message);
+
+        showDialog(
+          "error",
+          "Could not load analyses",
+          analysesError.message
+        );
       } else {
         setAnalyses(analysesData ?? []);
       }
 
       if (journalError) {
         console.error(journalError);
+
+        showDialog(
+          "error",
+          "Could not load Journal status",
+          journalError.message
+        );
       } else {
         const screenshotIds =
           journalTrades
@@ -123,8 +173,15 @@ export default function AnalyticsPage() {
     loadAnalyses();
   }, [router]);
 
-  const handleAddToJournal = async (analysis: ScreenshotAnalysis) => {
+  const handleAddToJournal = async (
+    analysis: ScreenshotAnalysis
+  ) => {
     if (journalScreenshotIds.includes(analysis.id)) {
+      showDialog(
+        "info",
+        "Already in Journal",
+        "This analysis has already been added to your Journal."
+      );
       return;
     }
 
@@ -132,7 +189,9 @@ export default function AnalyticsPage() {
       analysis.direction !== "long" &&
       analysis.direction !== "short"
     ) {
-      alert(
+      showDialog(
+        "warning",
+        "Direction required",
         "This analysis must have a Long or Short direction before it can be added to the Journal."
       );
       return;
@@ -143,7 +202,9 @@ export default function AnalyticsPage() {
       analysis.stop_loss === null ||
       analysis.target_price === null
     ) {
-      alert(
+      showDialog(
+        "warning",
+        "Trade prices required",
         "Entry price, stop loss, and target price are required before adding this analysis to the Journal."
       );
       return;
@@ -157,20 +218,46 @@ export default function AnalyticsPage() {
     const rewardPoints = Math.abs(target - entry);
 
     if (riskPoints <= 0) {
-      alert("Entry price and stop loss cannot be the same.");
+      showDialog(
+        "warning",
+        "Invalid risk",
+        "Entry price and stop loss cannot be the same."
+      );
       return;
     }
 
     if (analysis.direction === "long" && stop >= entry) {
-      alert(
+      showDialog(
+        "warning",
+        "Invalid Long setup",
         "For a Long trade, the stop loss must be below the entry price."
       );
       return;
     }
 
+    if (analysis.direction === "long" && target <= entry) {
+      showDialog(
+        "warning",
+        "Invalid Long target",
+        "For a Long trade, the target price must be above the entry price."
+      );
+      return;
+    }
+
     if (analysis.direction === "short" && stop <= entry) {
-      alert(
+      showDialog(
+        "warning",
+        "Invalid Short setup",
         "For a Short trade, the stop loss must be above the entry price."
+      );
+      return;
+    }
+
+    if (analysis.direction === "short" && target >= entry) {
+      showDialog(
+        "warning",
+        "Invalid Short target",
+        "For a Short trade, the target price must be below the entry price."
       );
       return;
     }
@@ -181,126 +268,186 @@ export default function AnalyticsPage() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      alert("You need to sign in first.");
+      showDialog(
+        "error",
+        "Sign-in required",
+        "You need to sign in before adding an analysis to the Journal."
+      );
       router.push("/login");
       return;
     }
 
     setAddingToJournal(analysis.id);
 
-    const symbol = analysis.symbol?.trim().toUpperCase() || "STOCK";
+    try {
+      const symbol =
+        analysis.symbol?.trim().toUpperCase() || "STOCK";
 
-    const contractData =
-      contractSettings[symbol] || {
-        contract: "STOCK" as const,
-        pointValue: 1,
-        tickSize: 0.01,
-      };
+      const contractData =
+        contractSettings[symbol] || {
+          contract: "STOCK" as const,
+          pointValue: 1,
+          tickSize: 0.01,
+        };
 
-    const quantity = 1;
-    const riskReward = rewardPoints / riskPoints;
-    const riskTicks = riskPoints / contractData.tickSize;
+      const quantity = 1;
+      const riskReward = rewardPoints / riskPoints;
+      const riskTicks = riskPoints / contractData.tickSize;
 
-    const riskDollars =
-      riskPoints * contractData.pointValue * quantity;
+      const riskDollars =
+        riskPoints * contractData.pointValue * quantity;
 
-    const targetProfit =
-      rewardPoints * contractData.pointValue * quantity;
+      const targetProfit =
+        rewardPoints * contractData.pointValue * quantity;
 
-    const journalNotes = [
-      `Original symbol: ${symbol}`,
-      `AI Score: ${analysis.score ?? 0}/100`,
-      analysis.bot_analysis || "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+      const journalNotes = [
+        `Original symbol: ${symbol}`,
+        `AI Score: ${analysis.score ?? 0}/100`,
+        analysis.bot_analysis || "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
-    const { error } = await supabase.from("trades").insert({
-      user_id: user.id,
-      screenshot_id: analysis.id,
-      contract: contractData.contract,
-      direction: analysis.direction,
-      entry,
-      stop_loss: stop,
-      take_profit: target,
-      reward: Number(riskReward.toFixed(2)),
-      quantity,
-      risk_points: riskPoints,
-      risk_ticks: riskTicks,
-      risk_dollars: riskDollars,
-      target_profit: targetProfit,
-      status: "planned",
-      notes: journalNotes,
-    });
+      const { error } = await supabase
+        .from("trades")
+        .insert({
+          user_id: user.id,
+          screenshot_id: analysis.id,
+          contract: contractData.contract,
+          direction: analysis.direction,
+          entry,
+          stop_loss: stop,
+          take_profit: target,
+          reward: Number(riskReward.toFixed(2)),
+          quantity,
+          risk_points: riskPoints,
+          risk_ticks: riskTicks,
+          risk_dollars: riskDollars,
+          target_profit: targetProfit,
+          status: "planned",
+          notes: journalNotes,
+        });
 
-    setAddingToJournal(null);
+      if (error) {
+        console.error(error);
 
-    if (error) {
-      console.error(error);
+        if (error.code === "23505") {
+          setJournalScreenshotIds((current) => [
+            ...new Set([...current, analysis.id]),
+          ]);
 
-      if (error.code === "23505") {
-        setJournalScreenshotIds((current) => [
-          ...new Set([...current, analysis.id]),
-        ]);
+          showDialog(
+            "info",
+            "Already in Journal",
+            "This analysis has already been added to your Journal."
+          );
+          return;
+        }
 
-        alert("This analysis has already been added to the Journal.");
+        showDialog(
+          "error",
+          "Could not add analysis",
+          error.message
+        );
         return;
       }
 
-      alert(error.message);
+      setJournalScreenshotIds((current) => [
+        ...new Set([...current, analysis.id]),
+      ]);
+
+      showDialog(
+        "success",
+        "Added to Journal",
+        "The analysis was added to your Journal successfully."
+      );
+    } catch (error) {
+      console.error(error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred.";
+
+      showDialog(
+        "error",
+        "Could not add analysis",
+        message
+      );
+    } finally {
+      setAddingToJournal(null);
+    }
+  };
+
+
+  const handleRemoveFromJournal = async () => {
+    if (!removeCandidate) {
       return;
     }
 
-    setJournalScreenshotIds((current) => [
-      ...new Set([...current, analysis.id]),
-    ]);
+    const analysis = removeCandidate;
+    setRemoveCandidate(null);
+    setAddingToJournal(analysis.id);
 
-    alert("Analysis added to the Journal successfully!");
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        showDialog(
+          "error",
+          "Sign-in required",
+          "You need to sign in before removing an analysis from the Journal."
+        );
+        router.push("/login");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("trades")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("screenshot_id", analysis.id);
+
+      if (error) {
+        console.error(error);
+
+        showDialog(
+          "error",
+          "Could not remove analysis",
+          error.message
+        );
+        return;
+      }
+
+      setJournalScreenshotIds((current) =>
+        current.filter((id) => id !== analysis.id)
+      );
+
+      showDialog(
+        "success",
+        "Removed from Journal",
+        "The analysis was removed from your Journal successfully."
+      );
+    } catch (error) {
+      console.error(error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred.";
+
+      showDialog(
+        "error",
+        "Could not remove analysis",
+        message
+      );
+    } finally {
+      setAddingToJournal(null);
+    }
   };
-
-  const handleRemoveFromJournal = async (
-  analysis: ScreenshotAnalysis
-) => {
-  const confirmRemove = confirm(
-    "Are you sure you want to remove this analysis from the Journal?"
-  );
-
-  if (!confirmRemove) return;
-
-  setAddingToJournal(analysis.id);
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    setAddingToJournal(null);
-    alert("You need to sign in first.");
-    router.push("/login");
-    return;
-  }
-
-  const { error } = await supabase
-    .from("trades")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("screenshot_id", analysis.id);
-
-  setAddingToJournal(null);
-
-  if (error) {
-    console.error(error);
-    alert(error.message);
-    return;
-  }
-
-  setJournalScreenshotIds((current) =>
-    current.filter((id) => id !== analysis.id)
-  );
-
-  alert("Analysis removed from the Journal successfully.");
-};
 
   const total = analyses.length;
 
@@ -329,13 +476,16 @@ export default function AnalyticsPage() {
           <h1 className="text-4xl font-bold">Analytics</h1>
 
           <p className="mt-2 text-gray-400">
-            Review your saved TraderBot analyses and add qualified setups
-            to your trading journal.
+            Review your saved TraderBot analyses and add qualified
+            setups to your trading journal.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <StatCard label="Total Analyses" value={String(total)} />
+          <StatCard
+            label="Total Analyses"
+            value={String(total)}
+          />
 
           <StatCard
             label="Average Score"
@@ -354,7 +504,11 @@ export default function AnalyticsPage() {
         </div>
 
         {loading && (
-          <p className="text-gray-400">Loading analyses...</p>
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">
+            <p className="text-gray-400">
+              Loading analyses...
+            </p>
+          </div>
         )}
 
         {!loading && analyses.length === 0 && (
@@ -367,8 +521,11 @@ export default function AnalyticsPage() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {analyses.map((item) => {
-            const alreadyAdded = journalScreenshotIds.includes(item.id);
-            const isAdding = addingToJournal === item.id;
+            const alreadyAdded =
+              journalScreenshotIds.includes(item.id);
+
+            const isAdding =
+              addingToJournal === item.id;
 
             return (
               <article
@@ -400,7 +557,9 @@ export default function AnalyticsPage() {
 
                   <p className="text-sm text-gray-400">
                     {item.timeframe || "No timeframe"} •{" "}
-                    {new Date(item.created_at).toLocaleString("en-CA")}
+                    {new Date(
+                      item.created_at
+                    ).toLocaleString("en-CA")}
                   </p>
 
                   <div className="grid grid-cols-2 gap-3 text-sm text-gray-300">
@@ -451,7 +610,9 @@ export default function AnalyticsPage() {
 
                     <Detail
                       label="Candle"
-                      value={formatCandleSignal(item.candle_signal)}
+                      value={formatCandleSignal(
+                        item.candle_signal
+                      )}
                     />
                   </div>
 
@@ -471,16 +632,19 @@ export default function AnalyticsPage() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        alreadyAdded
-                          ? handleRemoveFromJournal(item)
-                          : handleAddToJournal(item)
-                      }
+                      onClick={() => {
+                        if (alreadyAdded) {
+                          setRemoveCandidate(item);
+                          return;
+                        }
+
+                        handleAddToJournal(item);
+                      }}
                       disabled={isAdding}
                       className={`rounded-xl px-3 py-3 font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                         alreadyAdded
-                          ? "bg-red-600 text-white hover:bg-red-700"
-                          : "bg-blue-600 text-white hover:bg-blue-700"
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-blue-600 hover:bg-blue-700"
                       }`}
                     >
                       {isAdding
@@ -488,8 +652,8 @@ export default function AnalyticsPage() {
                           ? "Removing..."
                           : "Adding..."
                         : alreadyAdded
-                        ? " Remove from Journal"
-                        : " Add to Journal"}
+                        ? "Remove from Journal"
+                        : "Add to Journal"}
                     </button>
                   </div>
                 </div>
@@ -498,7 +662,211 @@ export default function AnalyticsPage() {
           })}
         </div>
       </div>
+
+      <FeedbackDialog
+        dialog={dialog}
+        onClose={closeDialog}
+      />
+
+      <ConfirmDialog
+        open={Boolean(removeCandidate)}
+        title="Remove from Journal?"
+        message="This analysis will be removed from your Journal. The saved Analytics analysis will remain available."
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        onCancel={() => setRemoveCandidate(null)}
+        onConfirm={handleRemoveFromJournal}
+      />
     </section>
+  );
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      onClick={onCancel}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-900 p-6 shadow-2xl shadow-black/50"
+      >
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-2xl font-bold text-red-400 ring-1 ring-red-500/30">
+            !
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h2
+              id="confirm-dialog-title"
+              className="text-xl font-bold text-white"
+            >
+              {title}
+            </h2>
+
+            <p
+              id="confirm-dialog-message"
+              className="mt-2 leading-relaxed text-gray-300"
+            >
+              {message}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl bg-gray-800 px-6 py-2.5 font-semibold text-white transition hover:bg-gray-700"
+          >
+            {cancelLabel}
+          </button>
+
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            className="rounded-xl bg-red-600 px-6 py-2.5 font-semibold text-white transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackDialog({
+  dialog,
+  onClose,
+}: {
+  dialog: DialogState;
+  onClose: () => void;
+}) {
+  if (!dialog.open) {
+    return null;
+  }
+
+  const styles: Record<
+    DialogType,
+    {
+      icon: string;
+      iconClass: string;
+      buttonClass: string;
+      titleClass: string;
+    }
+  > = {
+    success: {
+      icon: "✓",
+      iconClass:
+        "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30",
+      buttonClass:
+        "bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500",
+      titleClass: "text-emerald-300",
+    },
+    error: {
+      icon: "!",
+      iconClass:
+        "bg-red-500/15 text-red-400 ring-red-500/30",
+      buttonClass:
+        "bg-red-600 hover:bg-red-500 focus:ring-red-500",
+      titleClass: "text-red-300",
+    },
+    warning: {
+      icon: "!",
+      iconClass:
+        "bg-amber-500/15 text-amber-400 ring-amber-500/30",
+      buttonClass:
+        "bg-amber-600 hover:bg-amber-500 focus:ring-amber-500",
+      titleClass: "text-amber-300",
+    },
+    info: {
+      icon: "i",
+      iconClass:
+        "bg-blue-500/15 text-blue-400 ring-blue-500/30",
+      buttonClass:
+        "bg-blue-600 hover:bg-blue-500 focus:ring-blue-500",
+      titleClass: "text-blue-300",
+    },
+  };
+
+  const currentStyle = styles[dialog.type];
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feedback-dialog-title"
+        aria-describedby="feedback-dialog-message"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-900 p-6 shadow-2xl shadow-black/50"
+      >
+        <div className="flex items-start gap-4">
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-bold ring-1 ${currentStyle.iconClass}`}
+          >
+            {currentStyle.icon}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h2
+              id="feedback-dialog-title"
+              className={`text-xl font-bold ${currentStyle.titleClass}`}
+            >
+              {dialog.title}
+            </h2>
+
+            <p
+              id="feedback-dialog-message"
+              className="mt-2 leading-relaxed text-gray-300"
+            >
+              {dialog.message}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 flex justify-end">
+          <button
+            type="button"
+            autoFocus
+            onClick={onClose}
+            className={`rounded-xl px-6 py-2.5 font-semibold text-white transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${currentStyle.buttonClass}`}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

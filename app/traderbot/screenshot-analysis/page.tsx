@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
 type Trend = "uptrend" | "downtrend" | "consolidation";
@@ -13,6 +18,98 @@ type CaptureMoment =
   | "after_entry"
   | "in_trade"
   | "post_trade";
+
+type DialogType = "success" | "error";
+
+type DialogState = {
+  open: boolean;
+  type: DialogType;
+  title: string;
+  message: string;
+};
+
+type GeminiDecision =
+  | "SETUP_CONFIRMED"
+  | "WAIT_FOR_CONFIRMATION"
+  | "SETUP_INVALID";
+
+type GeminiTradeAnalysis = {
+  score: number;
+  decision: GeminiDecision;
+  setupType: string;
+  summary: string;
+  positives: string[];
+  warnings: string[];
+  confirmationsMissing: string[];
+  riskAssessment: string;
+  managementAdvice: string;
+  lesson: string;
+};
+
+type AnalyzeTradeResponse = {
+  analysis: GeminiTradeAnalysis;
+  calculations: {
+    riskPoints: number;
+    rewardPoints: number;
+    riskReward: number;
+  };
+};
+
+type ExtractedField<T> = {
+  value: T | null;
+  confidence: number;
+  needsAttention: boolean;
+  note: string;
+};
+
+type ScreenshotExtraction = {
+  symbol: ExtractedField<string>;
+  timeframe: ExtractedField<string>;
+  marketTrend: ExtractedField<Trend>;
+  direction: ExtractedField<Direction>;
+  swingHigh: ExtractedField<number>;
+  swingLow: ExtractedField<number>;
+  breakout: ExtractedField<boolean>;
+  retest: ExtractedField<boolean>;
+  candleSignal: ExtractedField<CandleSignal>;
+  entryPrice: ExtractedField<number>;
+  stopLoss: ExtractedField<number>;
+  targetPrice: ExtractedField<number>;
+  screenshotMoment: ExtractedField<CaptureMoment>;
+  generalWarnings: string[];
+};
+
+type ExtractScreenshotResponse = {
+  extraction: ScreenshotExtraction;
+};
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Could not read the selected image."));
+        return;
+      }
+
+      const base64 = reader.result.split(",")[1];
+
+      if (!base64) {
+        reject(new Error("Could not convert the image to Base64."));
+        return;
+      }
+
+      resolve(base64);
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Could not read the selected image."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function ScreenshotAnalysisPage() {
   const router = useRouter();
@@ -40,6 +137,22 @@ export default function ScreenshotAnalysisPage() {
   const [stopLoss, setStopLoss] = useState("");
   const [targetPrice, setTargetPrice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] =
+    useState<GeminiTradeAnalysis | null>(null);
+  const [aiRiskReward, setAiRiskReward] = useState<number | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [extraction, setExtraction] =
+    useState<ScreenshotExtraction | null>(null);
+  const [extractionError, setExtractionError] = useState("");
+
+  const [dialog, setDialog] = useState<DialogState>({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
 
   useEffect(() => {
     const checkUser = async () => {
@@ -55,7 +168,33 @@ export default function ScreenshotAnalysisPage() {
     checkUser();
   }, [router]);
 
-  const analysis = useMemo(() => {
+  useEffect(() => {
+    setExtraction(null);
+    setExtractionError("");
+  }, [file]);
+
+  useEffect(() => {
+    setAiAnalysis(null);
+    setAiRiskReward(null);
+    setAnalysisError("");
+  }, [
+    file,
+    symbol,
+    timeframe,
+    captureMoment,
+    trend,
+    swingHigh,
+    swingLow,
+    breakout,
+    retest,
+    candleSignal,
+    direction,
+    entryPrice,
+    stopLoss,
+    targetPrice,
+  ]);
+
+  const localAnalysis = useMemo(() => {
     let score = 0;
 
     const positives: string[] = [];
@@ -400,91 +539,430 @@ export default function ScreenshotAnalysisPage() {
     targetPrice,
   ]);
 
+  const displayAnalysis = aiAnalysis
+    ? {
+        ...localAnalysis,
+        score: aiAnalysis.score,
+        decision:
+          aiAnalysis.decision === "SETUP_CONFIRMED"
+            ? "✅ Setup Confirmed"
+            : aiAnalysis.decision === "WAIT_FOR_CONFIRMATION"
+            ? "⏳ Wait for Confirmation"
+            : "❌ Setup Invalid",
+        setupType: aiAnalysis.setupType,
+        positives: aiAnalysis.positives,
+        warnings: aiAnalysis.warnings,
+        managementAdvice: aiAnalysis.managementAdvice,
+        rr: aiRiskReward ?? localAnalysis.rr,
+        aiSummary: aiAnalysis.summary,
+        lesson: aiAnalysis.lesson,
+        confirmationsMissing: aiAnalysis.confirmationsMissing,
+        riskAssessment: aiAnalysis.riskAssessment,
+        text: `${aiAnalysis.decision}. Setup type: ${aiAnalysis.setupType}. ${aiAnalysis.summary} Strengths: ${aiAnalysis.positives.join(
+          " "
+        )} Warnings: ${aiAnalysis.warnings.join(
+          " "
+        )} Missing confirmations: ${aiAnalysis.confirmationsMissing.join(
+          " "
+        )} Risk assessment: ${aiAnalysis.riskAssessment} Management advice: ${aiAnalysis.managementAdvice} Lesson: ${aiAnalysis.lesson}`,
+      }
+    : {
+        ...localAnalysis,
+        confirmationsMissing: [] as string[],
+        riskAssessment: "",
+      };
+
+  const handleAutoFill = async () => {
+    setExtractionError("");
+    setExtraction(null);
+
+    if (!file) {
+      setExtractionError(
+        "Please upload a chart screenshot first."
+      );
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setExtractionError(
+        "Please use an image smaller than 5 MB."
+      );
+      return;
+    }
+
+    setExtracting(true);
+
+    try {
+      const imageBase64 = await fileToBase64(file);
+
+      const { data, error } =
+        await supabase.functions.invoke<ExtractScreenshotResponse>(
+          "analyze-trade",
+          {
+            body: {
+              mode: "extract",
+              imageBase64,
+              imageMimeType: file.type || "image/png",
+            },
+          }
+        );
+
+      if (error) {
+        if (error instanceof FunctionsHttpError) {
+          const errorBody = await error.context.json();
+
+          const details = Array.isArray(errorBody?.details)
+            ? errorBody.details.join(" ")
+            : "";
+
+          throw new Error(
+            details ||
+              errorBody?.error ||
+              "The screenshot could not be interpreted."
+          );
+        }
+
+        if (error instanceof FunctionsRelayError) {
+          throw new Error(
+            `Supabase relay error: ${error.message}`
+          );
+        }
+
+        if (error instanceof FunctionsFetchError) {
+          throw new Error(
+            `Could not reach the function: ${error.message}`
+          );
+        }
+
+        throw new Error(error.message);
+      }
+
+      if (!data?.extraction) {
+        throw new Error(
+          "The AI returned an invalid extraction response."
+        );
+      }
+
+      const result = data.extraction;
+
+      setExtraction(result);
+
+      if (result.symbol.value) {
+        setSymbol(result.symbol.value.toUpperCase());
+      }
+
+      if (result.timeframe.value) {
+        setTimeframe(result.timeframe.value);
+      }
+
+      if (result.marketTrend.value) {
+        setTrend(result.marketTrend.value);
+      }
+
+      if (result.direction.value) {
+        setDirection(result.direction.value);
+      }
+
+      if (result.swingHigh.value !== null) {
+        setSwingHigh(String(result.swingHigh.value));
+      } else {
+        setSwingHigh("");
+      }
+
+      if (result.swingLow.value !== null) {
+        setSwingLow(String(result.swingLow.value));
+      } else {
+        setSwingLow("");
+      }
+
+      if (result.breakout.value !== null) {
+        setBreakout(result.breakout.value);
+      }
+
+      if (result.retest.value !== null) {
+        setRetest(result.retest.value);
+      }
+
+      if (result.candleSignal.value) {
+        setCandleSignal(result.candleSignal.value);
+      }
+
+      if (result.entryPrice.value !== null) {
+        setEntryPrice(String(result.entryPrice.value));
+      } else {
+        setEntryPrice("");
+      }
+
+      if (result.stopLoss.value !== null) {
+        setStopLoss(String(result.stopLoss.value));
+      } else {
+        setStopLoss("");
+      }
+
+      if (result.targetPrice.value !== null) {
+        setTargetPrice(String(result.targetPrice.value));
+      } else {
+        setTargetPrice("");
+      }
+
+      if (result.screenshotMoment.value) {
+        setCaptureMoment(result.screenshotMoment.value);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unexpected extraction error occurred.";
+
+      setExtractionError(message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleAnalyzeTrade = async () => {
+    setAnalysisError("");
+    setAiAnalysis(null);
+    setAiRiskReward(null);
+
+    if (!file) {
+      setAnalysisError("Please upload a chart screenshot.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAnalysisError("Please use an image smaller than 5 MB.");
+      return;
+    }
+
+    if (!symbol.trim()) {
+      setAnalysisError("Please enter the symbol.");
+      return;
+    }
+
+    if (direction === "wait") {
+      setAnalysisError(
+        "Choose Long or Short before requesting the AI analysis."
+      );
+      return;
+    }
+
+    const entry = Number(entryPrice);
+    const stop = Number(stopLoss);
+    const target = Number(targetPrice);
+
+    if (
+      !Number.isFinite(entry) ||
+      !Number.isFinite(stop) ||
+      !Number.isFinite(target)
+    ) {
+      setAnalysisError(
+        "Enter valid Entry, Stop Loss, and Target prices."
+      );
+      return;
+    }
+
+    setAnalyzing(true);
+
+    try {
+      const imageBase64 = await fileToBase64(file);
+
+      const strategyDetails = [
+        breakout ? "Confirmed breakout" : "No confirmed breakout",
+        retest ? "Confirmed retest" : "No confirmed retest",
+        `Candle signal: ${candleSignal}`,
+        swingHigh ? `Swing high: ${swingHigh}` : "",
+        swingLow ? `Swing low: ${swingLow}` : "",
+      ]
+        .filter(Boolean)
+        .join(". ");
+
+      const { data, error } =
+        await supabase.functions.invoke<AnalyzeTradeResponse>(
+          "analyze-trade",
+          {
+            body: {
+              mode: "analyze",
+              symbol: symbol.trim().toUpperCase(),
+              timeframe: timeframe.trim(),
+              strategy: strategyDetails,
+              direction,
+              entryPrice: entry,
+              stopLoss: stop,
+              targetPrice: target,
+              marketTrend: trend,
+              screenshotMoment: captureMoment,
+              imageBase64,
+              imageMimeType: file.type || "image/png",
+            },
+          }
+        );
+
+     if (error) {
+  if (error instanceof FunctionsHttpError) {
+    const errorBody = await error.context.json();
+
+    console.log("Function error body:", errorBody);
+
+    const details = Array.isArray(errorBody?.details)
+      ? errorBody.details.join(" ")
+      : "";
+
+    throw new Error(
+      details ||
+        errorBody?.error ||
+        "The Edge Function returned an error."
+    );
+  }
+
+  if (error instanceof FunctionsRelayError) {
+    throw new Error(`Supabase relay error: ${error.message}`);
+  }
+
+  if (error instanceof FunctionsFetchError) {
+    throw new Error(`Could not reach the function: ${error.message}`);
+  }
+
+  throw new Error(error.message);
+}
+
+if (!data?.analysis) {
+  throw new Error("The AI returned an invalid response.");
+}
+
+setAiAnalysis(data.analysis);
+setAiRiskReward(data.calculations?.riskReward ?? null);
+} catch (error) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : "An unexpected error occurred.";
+
+  setAnalysisError(message);
+} finally {
+  setAnalyzing(false);
+}
+  };
+
   const handleSave = async () => {
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      setLoading(false);
-      router.push("/login");
-      return;
-    }
-
-    let imageUrl = "";
-
-    if (file) {
-      const safeFileName = file.name.replace(
-        /[^a-zA-Z0-9._-]/g,
-        "_"
-      );
-
-      const fileName = `${user.id}/${Date.now()}-${safeFileName}`;
-
-      const { error: uploadError } =
-        await supabase.storage
-          .from("trade-screenshots")
-          .upload(fileName, file);
-
-      if (uploadError) {
-        console.error(uploadError);
-        alert(uploadError.message);
-        setLoading(false);
+      if (userError || !user) {
+        router.push("/login");
         return;
       }
 
-      const { data } = supabase.storage
-        .from("trade-screenshots")
-        .getPublicUrl(fileName);
+      let imageUrl = "";
 
-      imageUrl = data.publicUrl;
-    }
+      if (file) {
+        const safeFileName = file.name.replace(
+          /[^a-zA-Z0-9._-]/g,
+          "_"
+        );
 
-    const newScreenshot = {
-      user_id: user.id,
-      image_url: imageUrl,
-      symbol: symbol.trim().toUpperCase(),
-      timeframe,
-      capture_moment: captureMoment,
-      trend,
-      swing_high: swingHigh
-        ? Number(swingHigh)
-        : null,
-      swing_low: swingLow
-        ? Number(swingLow)
-        : null,
-      breakout,
-      retest,
-      candle_signal: candleSignal,
-      direction,
-      entry_price: entryPrice
-        ? Number(entryPrice)
-        : null,
-      stop_loss: stopLoss
-        ? Number(stopLoss)
-        : null,
-      target_price: targetPrice
-        ? Number(targetPrice)
-        : null,
-      score: analysis.score,
-      bot_analysis: analysis.text,
-    };
+        const fileName = `${user.id}/${Date.now()}-${safeFileName}`;
 
-    const { error } = await supabase
-      .from("trade_screenshots")
-      .insert(newScreenshot);
+        const { error: uploadError } =
+          await supabase.storage
+            .from("trade-screenshots")
+            .upload(fileName, file);
 
-    if (error) {
+        if (uploadError) {
+          console.error(uploadError);
+
+          setDialog({
+            open: true,
+            type: "error",
+            title: "Upload Failed",
+            message: uploadError.message,
+          });
+
+          return;
+        }
+
+        const { data } = supabase.storage
+          .from("trade-screenshots")
+          .getPublicUrl(fileName);
+
+        imageUrl = data.publicUrl;
+      }
+
+      const newScreenshot = {
+        user_id: user.id,
+        image_url: imageUrl,
+        symbol: symbol.trim().toUpperCase(),
+        timeframe,
+        capture_moment: captureMoment,
+        trend,
+        swing_high: swingHigh
+          ? Number(swingHigh)
+          : null,
+        swing_low: swingLow
+          ? Number(swingLow)
+          : null,
+        breakout,
+        retest,
+        candle_signal: candleSignal,
+        direction,
+        entry_price: entryPrice
+          ? Number(entryPrice)
+          : null,
+        stop_loss: stopLoss
+          ? Number(stopLoss)
+          : null,
+        target_price: targetPrice
+          ? Number(targetPrice)
+          : null,
+        score: displayAnalysis.score,
+        bot_analysis: displayAnalysis.text,
+      };
+
+      const { error } = await supabase
+        .from("trade_screenshots")
+        .insert(newScreenshot);
+
+      if (error) {
+        console.error(error);
+
+        setDialog({
+          open: true,
+          type: "error",
+          title: "Save Failed",
+          message: error.message,
+        });
+
+        return;
+      }
+
+      setDialog({
+        open: true,
+        type: "success",
+        title: "Analysis Saved",
+        message: "Your analysis was saved successfully.",
+      });
+    } catch (error) {
       console.error(error);
-      alert(error.message);
-      setLoading(false);
-      return;
-    }
 
-    alert("Analysis saved successfully!");
-    router.push("/analytics");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred.";
+
+      setDialog({
+        open: true,
+        type: "error",
+        title: "Save Failed",
+        message,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -773,52 +1251,102 @@ export default function ScreenshotAnalysisPage() {
               />
             </div>
 
+            {extractionError && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                {extractionError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleAutoFill}
+              disabled={extracting || analyzing || loading || !file}
+              className="w-full rounded-xl bg-emerald-600 p-3 font-bold transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {extracting
+                ? "Reading screenshot..."
+                : "✨ Auto-fill from Screenshot"}
+            </button>
+
+            {extraction && (
+              <ExtractionReview extraction={extraction} />
+            )}
+
+            {analysisError && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                {analysisError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleAnalyzeTrade}
+              disabled={extracting || analyzing || loading}
+              className="w-full rounded-xl bg-purple-600 p-3 font-bold transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {analyzing
+                ? "TraderBot is analyzing..."
+                : "🤖 Analyze Trade"}
+            </button>
+
             <button
               type="button"
               onClick={handleSave}
-              disabled={loading}
+              disabled={loading || analyzing || extracting}
               className="w-full rounded-xl bg-blue-600 p-3 font-bold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading
                 ? "Saving Analysis..."
-                : "Save Analysis"}
+                : "💾 Save Analysis"}
             </button>
           </div>
 
           <div className="space-y-5 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-            <h2 className="text-2xl font-bold">
-              TraderBot Analysis
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-2xl font-bold">
+                TraderBot Analysis
+              </h2>
+
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  aiAnalysis
+                    ? "bg-purple-500/20 text-purple-200"
+                    : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                {aiAnalysis ? "Gemini AI" : "Local preview"}
+              </span>
+            </div>
 
             <div>
               <div className="text-5xl font-bold">
-                {analysis.score}/100
+                {displayAnalysis.score}/100
               </div>
 
               <p className="mt-2 text-lg">
-                {analysis.decision}
+                {displayAnalysis.decision}
               </p>
 
               <p className="mt-1 font-semibold text-blue-400">
-                📌 Setup Type: {analysis.setupType}
+                📌 Setup Type: {displayAnalysis.setupType}
               </p>
 
               <p className="mt-2 font-semibold text-purple-400">
-                {analysis.modeAdvice}
+                {displayAnalysis.modeAdvice}
               </p>
 
               <p className="mt-3 leading-relaxed text-gray-300">
-                {analysis.aiSummary}
+                {displayAnalysis.aiSummary}
               </p>
 
-              {analysis.managementAdvice && (
+              {displayAnalysis.managementAdvice && (
                 <div className="mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4">
                   <h3 className="font-bold text-orange-300">
                     🛡️ Trade Management
                   </h3>
 
                   <p className="mt-2 leading-relaxed text-orange-100">
-                    {analysis.managementAdvice}
+                    {displayAnalysis.managementAdvice}
                   </p>
                 </div>
               )}
@@ -828,14 +1356,14 @@ export default function ScreenshotAnalysisPage() {
               <div
                 className="h-3 rounded-full bg-blue-600 transition-all"
                 style={{
-                  width: `${analysis.score}%`,
+                  width: `${displayAnalysis.score}%`,
                 }}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               {Object.entries(
-                analysis.breakdown
+                displayAnalysis.breakdown
               ).map(([key, value]) => (
                 <div
                   key={key}
@@ -857,9 +1385,9 @@ export default function ScreenshotAnalysisPage() {
                 🟢 Strengths
               </h3>
 
-              {analysis.positives.length > 0 ? (
+              {displayAnalysis.positives.length > 0 ? (
                 <ul className="list-inside list-disc space-y-1 text-gray-300">
-                  {analysis.positives.map(
+                  {displayAnalysis.positives.map(
                     (item, index) => (
                       <li key={index}>{item}</li>
                     )
@@ -877,9 +1405,9 @@ export default function ScreenshotAnalysisPage() {
                 ⚠️ Warnings
               </h3>
 
-              {analysis.warnings.length > 0 ? (
+              {displayAnalysis.warnings.length > 0 ? (
                 <ul className="list-inside list-disc space-y-1 text-gray-300">
-                  {analysis.warnings.map(
+                  {displayAnalysis.warnings.map(
                     (item, index) => (
                       <li key={index}>{item}</li>
                     )
@@ -892,24 +1420,52 @@ export default function ScreenshotAnalysisPage() {
               )}
             </div>
 
+            {displayAnalysis.confirmationsMissing.length > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                <h3 className="font-bold text-amber-300">
+                  🔎 Missing Confirmations
+                </h3>
+
+                <ul className="mt-2 list-inside list-disc space-y-1 text-amber-100">
+                  {displayAnalysis.confirmationsMissing.map(
+                    (item, index) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {displayAnalysis.riskAssessment && (
+              <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+                <h3 className="font-bold text-cyan-300">
+                  📊 Risk Assessment
+                </h3>
+
+                <p className="mt-2 leading-relaxed text-cyan-100">
+                  {displayAnalysis.riskAssessment}
+                </p>
+              </div>
+            )}
+
             <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
               <h3 className="font-bold text-blue-300">
                 📚 Trading Lesson
               </h3>
 
               <p className="mt-2 leading-relaxed text-blue-100">
-                {analysis.lesson}
+                {displayAnalysis.lesson}
               </p>
             </div>
 
-            {analysis.rr > 0 && (
+            {displayAnalysis.rr > 0 && (
               <div className="flex items-center justify-between rounded-xl bg-gray-800 p-4">
                 <span className="text-gray-400">
                   Risk-to-Reward
                 </span>
 
                 <span className="text-lg font-bold">
-                  1:{analysis.rr.toFixed(2)}
+                  1:{displayAnalysis.rr.toFixed(2)}
                 </span>
               </div>
             )}
@@ -924,8 +1480,220 @@ export default function ScreenshotAnalysisPage() {
           </div>
         </div>
       </div>
+
+      <SaveDialog
+        dialog={dialog}
+        onClose={() =>
+          setDialog((current) => ({
+            ...current,
+            open: false,
+          }))
+        }
+        onViewAnalytics={() => {
+          setDialog((current) => ({
+            ...current,
+            open: false,
+          }));
+
+          router.push("/analytics");
+        }}
+      />
     </section>
   );
+}
+
+function SaveDialog({
+  dialog,
+  onClose,
+  onViewAnalytics,
+}: {
+  dialog: DialogState;
+  onClose: () => void;
+  onViewAnalytics: () => void;
+}) {
+  if (!dialog.open) {
+    return null;
+  }
+
+  const isSuccess = dialog.type === "success";
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="save-dialog-title"
+        aria-describedby="save-dialog-message"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-900 p-6 shadow-2xl shadow-black/50"
+      >
+        <div className="flex items-start gap-4">
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-bold ring-1 ${
+              isSuccess
+                ? "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
+                : "bg-red-500/15 text-red-400 ring-red-500/30"
+            }`}
+          >
+            {isSuccess ? "✓" : "!"}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h2
+              id="save-dialog-title"
+              className={`text-xl font-bold ${
+                isSuccess
+                  ? "text-emerald-300"
+                  : "text-red-300"
+              }`}
+            >
+              {dialog.title}
+            </h2>
+
+            <p
+              id="save-dialog-message"
+              className="mt-2 leading-relaxed text-gray-300"
+            >
+              {dialog.message}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-gray-800 px-5 py-2.5 font-semibold text-white transition hover:bg-gray-700"
+          >
+            Close
+          </button>
+
+          {isSuccess && (
+            <button
+              type="button"
+              autoFocus
+              onClick={onViewAnalytics}
+              className="rounded-xl bg-emerald-600 px-5 py-2.5 font-semibold text-white transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            >
+              View Analytics
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExtractionReview({
+  extraction,
+}: {
+  extraction: ScreenshotExtraction;
+}) {
+  const fieldsNeedingAttention = Object.entries(extraction)
+    .filter(([key]) => key !== "generalWarnings")
+    .flatMap(([key, value]) => {
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        !("needsAttention" in value)
+      ) {
+        return [];
+      }
+
+      const field = value as ExtractedField<unknown>;
+
+      return field.needsAttention ? [[key, field] as const] : [];
+    });
+
+  const hasWarnings =
+    fieldsNeedingAttention.length > 0 ||
+    extraction.generalWarnings.length > 0;
+
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        hasWarnings
+          ? "border-amber-500/30 bg-amber-500/10"
+          : "border-emerald-500/30 bg-emerald-500/10"
+      }`}
+    >
+      <h3
+        className={`font-bold ${
+          hasWarnings ? "text-amber-300" : "text-emerald-300"
+        }`}
+      >
+        {hasWarnings
+          ? "⚠️ Review AI-filled fields"
+          : "✅ AI-filled fields look clear"}
+      </h3>
+
+      <p
+        className={`mt-1 text-sm ${
+          hasWarnings ? "text-amber-100" : "text-emerald-100"
+        }`}
+      >
+        The values remain editable. Review them before clicking
+        Analyze Trade.
+      </p>
+
+      {fieldsNeedingAttention.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {fieldsNeedingAttention.map(([key, field]) => (
+            <div
+              key={key}
+              className="rounded-lg bg-black/20 p-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold">
+                  {formatExtractionLabel(key)}
+                </span>
+
+                <span className="text-xs">
+                  {Math.round(field.confidence)}% confidence
+                </span>
+              </div>
+
+              <p className="mt-1 text-sm text-amber-100">
+                {field.note ||
+                  "This value should be reviewed manually."}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {extraction.generalWarnings.length > 0 && (
+        <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-amber-100">
+          {extraction.generalWarnings.map((warning, index) => (
+            <li key={index}>{warning}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function formatExtractionLabel(key: string) {
+  const labels: Record<string, string> = {
+    symbol: "Symbol",
+    timeframe: "Timeframe",
+    marketTrend: "Market Trend",
+    direction: "Trade Direction",
+    swingHigh: "Swing High",
+    swingLow: "Swing Low",
+    breakout: "Breakout",
+    retest: "Retest",
+    candleSignal: "Candle Signal",
+    entryPrice: "Entry Price",
+    stopLoss: "Stop Loss",
+    targetPrice: "Target Price",
+    screenshotMoment: "Screenshot Moment",
+  };
+
+  return labels[key] ?? key;
 }
 
 function formatBreakdownLabel(key: string) {
