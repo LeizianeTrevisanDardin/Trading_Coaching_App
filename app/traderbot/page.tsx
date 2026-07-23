@@ -183,7 +183,7 @@ export default function TraderBotPage() {
               <h2 className="text-xl font-semibold mb-6">Trade Plan</h2>
 
               {!result ? (
-                <p className="text-slate-400">Entre Entry, Stop, Account Size and Risk %.</p>
+                <p className="text-slate-400">Fill with your Entry, Stop, Account Size and Risk %.</p>
               ) : (
                 <div className="space-y-4">
                   {result.warning && (
