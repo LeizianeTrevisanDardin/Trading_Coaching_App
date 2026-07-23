@@ -1,6 +1,6 @@
-# 📈 Trade AI Coaching
+#  Trade AI Coaching
 
-A modern trading journal and planning platform built with **Next.js**, **TypeScript**, and **Supabase**. Designed to help futures traders improve consistency through structured planning, risk management, trade journaling, and AI-assisted trade analysis.
+I created a modern trading journal and planning platform built with **Next.js**, **TypeScript**, and **Supabase**. Designed to help futures traders improve consistency through structured planning, risk management, trade journaling, and AI-assisted trade analysis.
 
 ---
 
@@ -21,7 +21,7 @@ This project also serves as a portfolio piece demonstrating my skills in full-st
 
 ---
 
-### 📊 Trade Planner
+### Trade Planner
 
 Plan every trade before entering the market.
 
