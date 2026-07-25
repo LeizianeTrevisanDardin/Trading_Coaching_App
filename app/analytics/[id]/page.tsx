@@ -38,6 +38,22 @@ type ContractData = {
   tickSize: number;
 };
 
+type DialogType = "success" | "error" | "warning" | "info";
+
+type DialogState = {
+  open: boolean;
+  type: DialogType;
+  title: string;
+  message: string;
+};
+
+const initialDialog: DialogState = {
+  open: false,
+  type: "info",
+  title: "",
+  message: "",
+};
+
 const contractSettings: Record<string, ContractData> = {
   MES: {
     contract: "MES",
@@ -77,6 +93,28 @@ export default function AnalysisDetailPage() {
   const [saving, setSaving] = useState(false);
   const [addingToJournal, setAddingToJournal] = useState(false);
   const [alreadyInJournal, setAlreadyInJournal] = useState(false);
+  const [dialog, setDialog] = useState<DialogState>(initialDialog);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const showDialog = (
+    type: DialogType,
+    title: string,
+    message: string
+  ) => {
+    setDialog({
+      open: true,
+      type,
+      title,
+      message,
+    });
+  };
+
+  const closeDialog = () => {
+    setDialog((current) => ({
+      ...current,
+      open: false,
+    }));
+  };
 
   useEffect(() => {
     const loadAnalysis = async () => {
@@ -101,7 +139,11 @@ export default function AnalysisDetailPage() {
 
       if (error) {
         console.error(error);
-        alert(error.message);
+        showDialog(
+          "error",
+          "Could Not Load Analysis",
+          error.message
+        );
         setLoading(false);
         return;
       }
@@ -141,7 +183,9 @@ export default function AnalysisDetailPage() {
       analysis.direction !== "long" &&
       analysis.direction !== "short"
     ) {
-      alert(
+      showDialog(
+        "warning",
+        "Direction Required",
         "Select Long or Short before adding this analysis to the Journal."
       );
       return;
@@ -152,7 +196,9 @@ export default function AnalysisDetailPage() {
       analysis.stop_loss === null ||
       analysis.target_price === null
     ) {
-      alert(
+      showDialog(
+        "warning",
+        "Trade Prices Required",
         "Entry price, stop loss, and target price are required before adding this analysis to the Journal."
       );
       return;
@@ -166,7 +212,9 @@ export default function AnalysisDetailPage() {
     const rewardPoints = Math.abs(target - entry);
 
     if (riskPoints <= 0) {
-      alert(
+      showDialog(
+        "warning",
+        "Invalid Risk",
         "Entry price and stop loss cannot be the same."
       );
       return;
@@ -176,7 +224,9 @@ export default function AnalysisDetailPage() {
       analysis.direction === "long" &&
       stop >= entry
     ) {
-      alert(
+      showDialog(
+        "warning",
+        "Invalid Long Setup",
         "For a Long trade, the stop loss must be below the entry price."
       );
       return;
@@ -186,7 +236,9 @@ export default function AnalysisDetailPage() {
       analysis.direction === "short" &&
       stop <= entry
     ) {
-      alert(
+      showDialog(
+        "warning",
+        "Invalid Short Setup",
         "For a Short trade, the stop loss must be above the entry price."
       );
       return;
@@ -198,7 +250,11 @@ export default function AnalysisDetailPage() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      alert("You need to sign in first.");
+      showDialog(
+        "error",
+        "Sign-In Required",
+        "You need to sign in first."
+      );
       router.push("/login");
       return;
     }
@@ -265,21 +321,29 @@ export default function AnalysisDetailPage() {
       if (error.code === "23505") {
         setAlreadyInJournal(true);
 
-        alert(
-          "This analysis has already been added to the Journal."
+        showDialog(
+          "info",
+          "Already in Journal",
+          "This analysis has already been added to your Journal."
         );
 
         return;
       }
 
-      alert(error.message);
+      showDialog(
+        "error",
+        "Could Not Add Analysis",
+        error.message
+      );
       return;
     }
 
     setAlreadyInJournal(true);
 
-    alert(
-      "Analysis added to the Journal successfully!"
+    showDialog(
+      "success",
+      "Added to Journal",
+      "The analysis was added to your Journal successfully."
     );
   };
 
@@ -302,15 +366,15 @@ export default function AnalysisDetailPage() {
 
     if (error) {
       console.error(error);
-      alert(error.message);
+      showDialog(
+        "error",
+        "Could Not Save Result",
+        error.message
+      );
       setSaving(false);
       return;
     }
 
-    /*
-      If this analysis has already been added to the Journal,
-      update its result there as well.
-    */
     if (alreadyInJournal) {
       const journalStatus =
         tradeStatus === "winner"
@@ -325,13 +389,12 @@ export default function AnalysisDetailPage() {
         .from("trades")
         .update({
           status: journalStatus,
-          result_r: resultR
-            ? Number(resultR)
-            : null,
+          result_r: resultR ? Number(resultR) : null,
           pnl: pnl ? Number(pnl) : null,
           notes,
         })
         .eq("screenshot_id", analysis.id);
+
 
       if (journalError) {
         console.error(
@@ -339,7 +402,9 @@ export default function AnalysisDetailPage() {
           journalError
         );
 
-        alert(
+        showDialog(
+          "error",
+          "Journal Update Failed",
           `The analysis was saved, but the Journal could not be updated: ${journalError.message}`
         );
 
@@ -362,39 +427,32 @@ export default function AnalysisDetailPage() {
         : current
     );
 
-    alert("Trade result saved successfully!");
+    showDialog(
+      "success",
+      "Trade Updated",
+      "The trade result was saved successfully."
+    );
     setSaving(false);
   };
 
   const handleDelete = async () => {
     if (!analysis) return;
 
-    const confirmDelete = confirm(
-      "Are you sure you want to delete this analysis?"
-    );
+    setDeleteDialogOpen(false);
 
-    if (!confirmDelete) return;
-
-    /*
-      Prevents a foreign-key error if this analysis
-      has already been added to the Journal.
-    */
     if (alreadyInJournal) {
-      const deleteJournalTrade = confirm(
-        "This analysis is connected to a Journal trade. Delete the Journal trade too?"
-      );
-
-      if (!deleteJournalTrade) return;
-
-      const { error: journalDeleteError } =
-        await supabase
-          .from("trades")
-          .delete()
-          .eq("screenshot_id", analysis.id);
+      const { error: journalDeleteError } = await supabase
+        .from("trades")
+        .delete()
+        .eq("screenshot_id", analysis.id);
 
       if (journalDeleteError) {
         console.error(journalDeleteError);
-        alert(journalDeleteError.message);
+        showDialog(
+          "error",
+          "Could Not Delete Journal Trade",
+          journalDeleteError.message
+        );
         return;
       }
     }
@@ -406,11 +464,14 @@ export default function AnalysisDetailPage() {
 
     if (error) {
       console.error(error);
-      alert(error.message);
+      showDialog(
+        "error",
+        "Could Not Delete Analysis",
+        error.message
+      );
       return;
     }
 
-    alert("Analysis deleted successfully.");
     router.push("/analytics");
   };
 
@@ -459,7 +520,7 @@ export default function AnalysisDetailPage() {
               ? "✓ Added to Journal"
               : addingToJournal
               ? "Adding..."
-              : "⭐ Add to Journal"}
+              : "Add to Journal"}
           </button>
         </div>
 
@@ -726,7 +787,7 @@ export default function AnalysisDetailPage() {
           <div className="flex justify-end pt-6">
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => setDeleteDialogOpen(true)}
               className="rounded-xl bg-red-600 px-5 py-3 font-bold transition hover:bg-red-700"
             >
               🗑️ Delete Analysis
@@ -734,7 +795,211 @@ export default function AnalysisDetailPage() {
           </div>
         </div>
       </div>
+
+      <FeedbackDialog
+        dialog={dialog}
+        onClose={closeDialog}
+      />
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Delete Analysis?"
+        message={
+          alreadyInJournal
+            ? "This analysis and its connected Journal trade will be permanently deleted."
+            : "This analysis will be permanently deleted."
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onCancel={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+      />
     </section>
+  );
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      onClick={onCancel}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-900 p-6 shadow-2xl shadow-black/50"
+      >
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-2xl font-bold text-red-400 ring-1 ring-red-500/30">
+            !
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h2
+              id="confirm-dialog-title"
+              className="text-xl font-bold text-white"
+            >
+              {title}
+            </h2>
+
+            <p
+              id="confirm-dialog-message"
+              className="mt-2 leading-relaxed text-gray-300"
+            >
+              {message}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl bg-gray-800 px-6 py-2.5 font-semibold text-white transition hover:bg-gray-700"
+          >
+            {cancelLabel}
+          </button>
+
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            className="rounded-xl bg-red-600 px-6 py-2.5 font-semibold text-white transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackDialog({
+  dialog,
+  onClose,
+}: {
+  dialog: DialogState;
+  onClose: () => void;
+}) {
+  if (!dialog.open) return null;
+
+  const styles: Record<
+    DialogType,
+    {
+      icon: string;
+      iconClass: string;
+      buttonClass: string;
+      titleClass: string;
+    }
+  > = {
+    success: {
+      icon: "✓",
+      iconClass:
+        "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30",
+      buttonClass:
+        "bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500",
+      titleClass: "text-emerald-300",
+    },
+    error: {
+      icon: "!",
+      iconClass:
+        "bg-red-500/15 text-red-400 ring-red-500/30",
+      buttonClass:
+        "bg-red-600 hover:bg-red-500 focus:ring-red-500",
+      titleClass: "text-red-300",
+    },
+    warning: {
+      icon: "!",
+      iconClass:
+        "bg-amber-500/15 text-amber-400 ring-amber-500/30",
+      buttonClass:
+        "bg-amber-600 hover:bg-amber-500 focus:ring-amber-500",
+      titleClass: "text-amber-300",
+    },
+    info: {
+      icon: "i",
+      iconClass:
+        "bg-blue-500/15 text-blue-400 ring-blue-500/30",
+      buttonClass:
+        "bg-blue-600 hover:bg-blue-500 focus:ring-blue-500",
+      titleClass: "text-blue-300",
+    },
+  };
+
+  const currentStyle = styles[dialog.type];
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feedback-dialog-title"
+        aria-describedby="feedback-dialog-message"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-3xl border border-gray-700 bg-gray-900 p-6 shadow-2xl shadow-black/50"
+      >
+        <div className="flex items-start gap-4">
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-bold ring-1 ${currentStyle.iconClass}`}
+          >
+            {currentStyle.icon}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h2
+              id="feedback-dialog-title"
+              className={`text-xl font-bold ${currentStyle.titleClass}`}
+            >
+              {dialog.title}
+            </h2>
+
+            <p
+              id="feedback-dialog-message"
+              className="mt-2 leading-relaxed text-gray-300"
+            >
+              {dialog.message}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 flex justify-end">
+          <button
+            type="button"
+            autoFocus
+            onClick={onClose}
+            className={`rounded-xl px-6 py-2.5 font-semibold text-white transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${currentStyle.buttonClass}`}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
