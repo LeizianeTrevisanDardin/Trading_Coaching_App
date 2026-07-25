@@ -8,7 +8,7 @@ import { Menu, X } from "lucide-react";
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/traderbot", label: "Trade Planner" },
+ { href: "/trader-planner", label: "Trade Planner" },
   {
     href: "/traderbot/screenshot-analysis",
     label: "Screenshot AI",
@@ -64,11 +64,17 @@ export default function AppNav() {
   };
 
   const isActive = (href: string) => {
-    if (href === "/dashboard" || href === "/traderbot") {
+    if (
+      href === "/dashboard" ||
+      href === "/trader-planner"
+    ) {
       return pathname === href;
     }
 
-    return pathname === href || pathname.startsWith(`${href}/`);
+    return (
+      pathname === href ||
+      pathname.startsWith(`${href}/`)
+    );
   };
 
   return (
