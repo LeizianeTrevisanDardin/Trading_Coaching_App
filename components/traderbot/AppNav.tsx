@@ -64,7 +64,7 @@ export default function AppNav() {
   };
 
   const isActive = (href: string) => {
-    if (href === "/dashboard") {
+    if (href === "/dashboard" || href === "/traderbot") {
       return pathname === href;
     }
 
