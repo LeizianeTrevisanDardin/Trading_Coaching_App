@@ -32,7 +32,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/traderbot/screenshot-analysis");
+    router.push("/dashboard");
   };
 
   return (
