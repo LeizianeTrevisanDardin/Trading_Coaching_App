@@ -749,12 +749,12 @@ export default function AnalysisDetailPage() {
   }
 
   return (
-    <section className="min-h-screen bg-gray-950 p-6 text-white">
-      <div className="mx-auto max-w-6xl space-y-6">
+    <section className="min-h-screen bg-gray-950 px-4 py-6 text-white sm:px-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href="/analytics"
-            className="text-blue-400 hover:text-blue-300"
+            className="text-blue-400 transition hover:text-blue-300"
           >
             ← Back to Analytics
           </Link>
@@ -762,9 +762,7 @@ export default function AnalysisDetailPage() {
           <button
             type="button"
             onClick={handleAddToJournal}
-            disabled={
-              alreadyInJournal || addingToJournal
-            }
+            disabled={alreadyInJournal || addingToJournal}
             className="rounded-xl bg-blue-600 px-5 py-3 font-bold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-green-900 disabled:text-green-300"
           >
             {alreadyInJournal
@@ -776,280 +774,234 @@ export default function AnalysisDetailPage() {
         </div>
 
         <div>
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-3xl font-bold sm:text-4xl">
             {analysis.symbol || "Analysis"}
           </h1>
 
           <p className="mt-1 text-gray-400">
             {analysis.timeframe || "No timeframe"} •{" "}
-            {new Date(
-              analysis.created_at
-            ).toLocaleString("en-CA")}
+            {new Date(analysis.created_at).toLocaleString("en-CA")}
           </p>
         </div>
 
-        {analysis.image_url && (
-          <img
-            src={analysis.image_url}
-            alt="Trading analysis screenshot"
-            className="w-full rounded-2xl border border-gray-800"
-          />
-        )}
-
-        <div className="grid gap-4 md:grid-cols-4">
-          <InfoCard
-            label="Score"
-            value={`${analysis.score ?? 0}/100`}
-          />
-
-          <InfoCard
-            label="Entry"
-            value={formatPrice(
-              analysis.entry_price
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+          <div className="lg:sticky lg:top-6">
+            {analysis.image_url ? (
+              <div className="max-h-[calc(100vh-3rem)] overflow-auto rounded-2xl border border-gray-800 bg-gray-900 shadow-xl shadow-black/20">
+                <img
+                  src={analysis.image_url}
+                  alt="Trading analysis screenshot"
+                  className="h-auto w-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-gray-700 bg-gray-900 p-6 text-center text-gray-400">
+                No screenshot available.
+              </div>
             )}
-          />
-
-          <InfoCard
-            label="Stop Loss"
-            value={formatPrice(
-              analysis.stop_loss
-            )}
-          />
-
-          <InfoCard
-            label="Target"
-            value={formatPrice(
-              analysis.target_price
-            )}
-          />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-            <h2 className="mb-4 text-2xl font-bold">
-              Price Action
-            </h2>
-
-            <DetailRow
-              label="Trend"
-              value={formatTrend(analysis.trend)}
-            />
-
-            <DetailRow
-              label="Direction"
-              value={formatDirection(
-                analysis.direction
-              )}
-            />
-
-            <DetailRow
-              label="Swing High"
-              value={formatPrice(
-                analysis.swing_high
-              )}
-            />
-
-            <DetailRow
-              label="Swing Low"
-              value={formatPrice(
-                analysis.swing_low
-              )}
-            />
-
-            <DetailRow
-              label="Breakout"
-              value={
-                analysis.breakout ? "Yes" : "No"
-              }
-            />
-
-            <DetailRow
-              label="Retest"
-              value={
-                analysis.retest ? "Yes" : "No"
-              }
-            />
-
-            <DetailRow
-              label="Candle Signal"
-              value={formatCandleSignal(
-                analysis.candle_signal
-              )}
-            />
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-            <h2 className="mb-4 text-2xl font-bold">
-              Trade Plan
-            </h2>
+          <div className="max-h-none space-y-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InfoCard
+                label="Score"
+                value={`${analysis.score ?? 0}/100`}
+              />
 
-            <DetailRow
-              label="Entry"
-              value={formatPrice(
-                analysis.entry_price
-              )}
-            />
+              <InfoCard
+                label="Entry"
+                value={formatPrice(analysis.entry_price)}
+              />
 
-            <DetailRow
-              label="Stop Loss"
-              value={formatPrice(
-                analysis.stop_loss
-              )}
-            />
+              <InfoCard
+                label="Stop Loss"
+                value={formatPrice(analysis.stop_loss)}
+              />
 
-            <DetailRow
-              label="Target"
-              value={formatPrice(
-                analysis.target_price
-              )}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-          <h2 className="mb-3 text-2xl font-bold">
-            TraderBot Analysis
-          </h2>
-
-          <p className="whitespace-pre-line leading-relaxed text-gray-300">
-            {analysis.bot_analysis ||
-              "No AI analysis available."}
-          </p>
-        </div>
-
-        <div className="mx-auto mt-12 max-w-3xl space-y-4 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-          <h2 className="text-2xl font-bold">
-            Trade Result
-          </h2>
-
-          {!alreadyInJournal && (
-            <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-200">
-              Saving the result will automatically add this analysis to the Journal.
+              <InfoCard
+                label="Target"
+                value={formatPrice(analysis.target_price)}
+              />
             </div>
-          )}
 
-          <div>
-            <label
-              htmlFor="tradeStatus"
-              className="mb-2 block text-sm text-gray-300"
-            >
-              Trade status
-            </label>
+            <div className="space-y-2 rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <h2 className="mb-4 text-2xl font-bold">Price Action</h2>
 
-            <select
-              id="tradeStatus"
-              className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={tradeStatus}
-              onChange={(event) =>
-                setTradeStatus(event.target.value)
-              }
-            >
-              <option value="pending">
-                Not traded yet
-              </option>
+              <DetailRow
+                label="Trend"
+                value={formatTrend(analysis.trend)}
+              />
 
-              <option value="winner">
-                Winner
-              </option>
+              <DetailRow
+                label="Direction"
+                value={formatDirection(analysis.direction)}
+              />
 
-              <option value="loser">
-                Loser
-              </option>
+              <DetailRow
+                label="Swing High"
+                value={formatPrice(analysis.swing_high)}
+              />
 
-              <option value="breakeven">
-                Breakeven
-              </option>
-            </select>
-          </div>
+              <DetailRow
+                label="Swing Low"
+                value={formatPrice(analysis.swing_low)}
+              />
 
-          <div>
-            <label
-              htmlFor="resultR"
-              className="mb-2 block text-sm text-gray-300"
-            >
-              Result in R
-            </label>
+              <DetailRow
+                label="Breakout"
+                value={analysis.breakout ? "Yes" : "No"}
+              />
 
-            <input
-              id="resultR"
-              type="number"
-              step="any"
-              className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Example: 2 or -1"
-              value={resultR}
-              onChange={(event) =>
-                setResultR(event.target.value)
-              }
-            />
-          </div>
+              <DetailRow
+                label="Retest"
+                value={analysis.retest ? "Yes" : "No"}
+              />
 
-          <div>
-            <label
-              htmlFor="pnl"
-              className="mb-2 block text-sm text-gray-300"
-            >
-              Profit and loss
-            </label>
+              <DetailRow
+                label="Candle Signal"
+                value={formatCandleSignal(analysis.candle_signal)}
+              />
+            </div>
 
-            <input
-              id="pnl"
-              type="number"
-              step="any"
-              className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Example: 120 or -50"
-              value={pnl}
-              onChange={(event) =>
-                setPnl(event.target.value)
-              }
-            />
-          </div>
+            <div className="space-y-2 rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <h2 className="mb-4 text-2xl font-bold">Trade Plan</h2>
 
-          <div>
-            <label
-              htmlFor="notes"
-              className="mb-2 block text-sm text-gray-300"
-            >
-              Notes and lessons learned
-            </label>
+              <DetailRow
+                label="Entry"
+                value={formatPrice(analysis.entry_price)}
+              />
 
-            <textarea
-              id="notes"
-              className="min-h-32 w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Write your observations and lessons learned"
-              value={notes}
-              onChange={(event) =>
-                setNotes(event.target.value)
-              }
-            />
-          </div>
+              <DetailRow
+                label="Stop Loss"
+                value={formatPrice(analysis.stop_loss)}
+              />
 
-          <button
-            type="button"
-            onClick={handleSaveResult}
-            disabled={saving}
-            className="w-full rounded-xl bg-blue-600 px-5 py-3 font-bold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving
-              ? "Saving..."
-              : "Save Trade Result"}
-          </button>
+              <DetailRow
+                label="Target"
+                value={formatPrice(analysis.target_price)}
+              />
+            </div>
 
-          <div className="flex justify-end pt-6">
-            <button
-              type="button"
-              onClick={() => setDeleteDialogOpen(true)}
-              className="rounded-xl bg-red-600 px-5 py-3 font-bold transition hover:bg-red-700"
-            >
-              🗑️ Delete Analysis
-            </button>
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <h2 className="mb-3 text-2xl font-bold">
+                TraderBot Analysis
+              </h2>
+
+              <p className="whitespace-pre-line leading-relaxed text-gray-300">
+                {analysis.bot_analysis || "No AI analysis available."}
+              </p>
+            </div>
+
+            <div className="space-y-4 rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <h2 className="text-2xl font-bold">Trade Result</h2>
+
+              {!alreadyInJournal && (
+                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-200">
+                  Saving the result will automatically add this analysis to the
+                  Journal.
+                </div>
+              )}
+
+              <div>
+                <label
+                  htmlFor="tradeStatus"
+                  className="mb-2 block text-sm text-gray-300"
+                >
+                  Trade status
+                </label>
+
+                <select
+                  id="tradeStatus"
+                  className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={tradeStatus}
+                  onChange={(event) => setTradeStatus(event.target.value)}
+                >
+                  <option value="pending">Not traded yet</option>
+                  <option value="winner">Winner</option>
+                  <option value="loser">Loser</option>
+                  <option value="breakeven">Breakeven</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="resultR"
+                  className="mb-2 block text-sm text-gray-300"
+                >
+                  Result in R
+                </label>
+
+                <input
+                  id="resultR"
+                  type="number"
+                  step="any"
+                  className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Example: 2 or -1"
+                  value={resultR}
+                  onChange={(event) => setResultR(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="pnl"
+                  className="mb-2 block text-sm text-gray-300"
+                >
+                  Profit and loss
+                </label>
+
+                <input
+                  id="pnl"
+                  type="number"
+                  step="any"
+                  className="w-full rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Example: 120 or -50"
+                  value={pnl}
+                  onChange={(event) => setPnl(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="notes"
+                  className="mb-2 block text-sm text-gray-300"
+                >
+                  Notes and lessons learned
+                </label>
+
+                <textarea
+                  id="notes"
+                  className="min-h-32 w-full resize-y rounded-xl border border-gray-700 bg-gray-800 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Write your observations and lessons learned"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveResult}
+                disabled={saving}
+                className="w-full rounded-xl bg-blue-600 px-5 py-3 font-bold transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save Trade Result"}
+              </button>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="rounded-xl bg-red-600 px-5 py-3 font-bold transition hover:bg-red-700"
+                >
+                  🗑️ Delete Analysis
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <FeedbackDialog
-        dialog={dialog}
-        onClose={closeDialog}
-      />
+      <FeedbackDialog dialog={dialog} onClose={closeDialog} />
 
       <ConfirmDialog
         open={deleteDialogOpen}
