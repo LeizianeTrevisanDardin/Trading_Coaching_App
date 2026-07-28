@@ -470,8 +470,8 @@ export default function AnalyticsPage() {
   ).length;
 
   return (
-    <section className="min-h-screen bg-gray-950 p-6 text-white">
-      <div className="mx-auto max-w-7xl space-y-8">
+    <section className="h-screen overflow-hidden bg-gray-950 p-4 text-white sm:p-6">
+      <div className="mx-auto flex h-full max-w-7xl flex-col gap-5">
         <div>
           <h1 className="text-4xl font-bold">Analytics</h1>
 
@@ -519,7 +519,8 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl pr-1 sm:pr-2">
+          <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
           {analyses.map((item) => {
             const alreadyAdded =
               journalScreenshotIds.includes(item.id);
@@ -660,6 +661,7 @@ export default function AnalyticsPage() {
               </article>
             );
           })}
+          </div>
         </div>
       </div>
 

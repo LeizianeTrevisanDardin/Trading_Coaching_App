@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 type TradeStatus =
   | "planned"
@@ -43,34 +43,43 @@ export default function DashboardPage() {
     useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     const loadDashboard = async () => {
-      setLoading(true);
-      setErrorMessage(null);
-
       try {
+        if (mounted) {
+          setLoading(true);
+          setErrorMessage(null);
+        }
+
+        // Verifica primeiro se existe uma sessão salva.
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-        if (userError) {
-          console.error(
-            "Dashboard user error:",
-            userError.message,
-            userError
+        if (sessionError) {
+          console.warn(
+            "Could not read authentication session:",
+            sessionError.message
           );
 
-          setErrorMessage(
-            "Could not verify the signed-in user."
-          );
+          if (mounted) {
+            setErrorMessage(
+              "Could not verify your authentication session."
+            );
+          }
 
           return;
         }
 
-        if (!user) {
-          router.push("/login");
+        // Não existe usuário logado.
+        if (!session?.user) {
+          router.replace("/login");
           return;
         }
+
+        const userId = session.user.id;
 
         const now = new Date();
 
@@ -99,7 +108,7 @@ export default function DashboardPage() {
           .select(
             "status, pnl, risk_dollars, created_at"
           )
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .gte(
             "created_at",
             startOfToday.toISOString()
@@ -115,25 +124,24 @@ export default function DashboardPage() {
         if (error) {
           console.error(
             "Dashboard load error:",
-            error.message,
-            error.details,
-            error.hint,
-            error.code,
-            error
+            error.message
           );
 
-          setErrorMessage(
-            error.message ||
-              "Could not load dashboard data."
-          );
+          if (mounted) {
+            setErrorMessage(
+              error.message ||
+                "Could not load dashboard data."
+            );
 
-          setStats(initialStats);
+            setStats(initialStats);
+          }
 
           return;
         }
 
         const trades = (data ?? []) as Trade[];
 
+        // Trades que já receberam um resultado.
         const completedTrades = trades.filter(
           (trade) =>
             trade.status === "win" ||
@@ -149,19 +157,28 @@ export default function DashboardPage() {
           (trade) => trade.status === "loss"
         ).length;
 
+        // Soma somente o P&L dos trades finalizados.
         const totalPnl = completedTrades.reduce(
-          (total, trade) =>
-            total + Number(trade.pnl ?? 0),
+          (total, trade) => {
+            return total + Number(trade.pnl ?? 0);
+          },
           0
         );
 
+        // Soma o risco de todos os trades criados hoje.
         const totalRisk = trades.reduce(
-          (total, trade) =>
-            total +
-            Number(trade.risk_dollars ?? 0),
+          (total, trade) => {
+            return (
+              total +
+              Math.abs(
+                Number(trade.risk_dollars ?? 0)
+              )
+            );
+          },
           0
         );
 
+        // Breakeven não entra no cálculo do Win Rate.
         const winRateTrades = wins + losses;
 
         const winRate =
@@ -169,31 +186,45 @@ export default function DashboardPage() {
             ? (wins / winRateTrades) * 100
             : 0;
 
-        setStats({
-          pnl: totalPnl,
-          tradesToday: completedTrades.length,
-          winRate,
-          riskUsed: totalRisk,
-        });
+        if (mounted) {
+          setStats({
+            pnl: totalPnl,
+
+            // Conta todos os trades criados hoje,
+            // incluindo planned.
+            tradesToday: trades.length,
+
+            winRate,
+            riskUsed: totalRisk,
+          });
+        }
       } catch (error) {
         console.error(
           "Unexpected dashboard error:",
           error
         );
 
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "An unexpected error occurred."
-        );
+        if (mounted) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred."
+          );
 
-        setStats(initialStats);
+          setStats(initialStats);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadDashboard();
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   return (
@@ -268,14 +299,12 @@ export default function DashboardPage() {
           stats.tradesToday === 0 && (
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
               <p className="text-slate-300">
-                No completed trades were found for
-                today.
+                No trades were found for today.
               </p>
 
               <p className="mt-1 text-sm text-slate-500">
-                Planned trades will appear in the
-                statistics after their result is
-                saved.
+                Trades created today will appear
+                here automatically.
               </p>
             </div>
           )}
@@ -308,8 +337,8 @@ function Card({
           positive
             ? "text-green-400"
             : negative
-            ? "text-red-400"
-            : "text-white"
+              ? "text-red-400"
+              : "text-white"
         }`}
       >
         {value}
