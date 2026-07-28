@@ -4,8 +4,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+type TradeStatus =
+  | "planned"
+  | "win"
+  | "loss"
+  | "breakeven";
+
 type Trade = {
-  status: "planned" | "win" | "loss" | "breakeven";
+  status: TradeStatus | null;
   pnl: number | null;
   risk_dollars: number | null;
   created_at: string;
@@ -28,83 +34,163 @@ const initialStats: DashboardStats = {
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [stats, setStats] = useState<DashboardStats>(initialStats);
+  const [stats, setStats] =
+    useState<DashboardStats>(initialStats);
+
   const [loading, setLoading] = useState(true);
+
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
   useEffect(() => {
     const loadDashboard = async () => {
       setLoading(true);
+      setErrorMessage(null);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (userError || !user) {
-        router.push("/login");
-        return;
-      }
+        if (userError) {
+          console.error(
+            "Dashboard user error:",
+            userError.message,
+            userError
+          );
 
-      const now = new Date();
+          setErrorMessage(
+            "Could not verify the signed-in user."
+          );
 
-      const startOfToday = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      );
+          return;
+        }
 
-      const startOfTomorrow = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1
-      );
+        if (!user) {
+          router.push("/login");
+          return;
+        }
 
-      const { data, error } = await supabase
-        .from("trades")
-        .select("status, pnl, risk_dollars, created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", startOfToday.toISOString())
-        .lt("created_at", startOfTomorrow.toISOString());
+        const now = new Date();
 
-      if (error) {
-        console.error("Dashboard error:", error);
+        const startOfToday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          0,
+          0,
+          0,
+          0
+        );
+
+        const startOfTomorrow = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + 1,
+          0,
+          0,
+          0,
+          0
+        );
+
+        const { data, error } = await supabase
+          .from("trades")
+          .select(
+            "status, pnl, risk_dollars, created_at"
+          )
+          .eq("user_id", user.id)
+          .gte(
+            "created_at",
+            startOfToday.toISOString()
+          )
+          .lt(
+            "created_at",
+            startOfTomorrow.toISOString()
+          )
+          .order("created_at", {
+            ascending: false,
+          });
+
+        if (error) {
+          console.error(
+            "Dashboard load error:",
+            error.message,
+            error.details,
+            error.hint,
+            error.code,
+            error
+          );
+
+          setErrorMessage(
+            error.message ||
+              "Could not load dashboard data."
+          );
+
+          setStats(initialStats);
+
+          return;
+        }
+
+        const trades = (data ?? []) as Trade[];
+
+        const completedTrades = trades.filter(
+          (trade) =>
+            trade.status === "win" ||
+            trade.status === "loss" ||
+            trade.status === "breakeven"
+        );
+
+        const wins = completedTrades.filter(
+          (trade) => trade.status === "win"
+        ).length;
+
+        const losses = completedTrades.filter(
+          (trade) => trade.status === "loss"
+        ).length;
+
+        const totalPnl = completedTrades.reduce(
+          (total, trade) =>
+            total + Number(trade.pnl ?? 0),
+          0
+        );
+
+        const totalRisk = trades.reduce(
+          (total, trade) =>
+            total +
+            Number(trade.risk_dollars ?? 0),
+          0
+        );
+
+        const winRateTrades = wins + losses;
+
+        const winRate =
+          winRateTrades > 0
+            ? (wins / winRateTrades) * 100
+            : 0;
+
+        setStats({
+          pnl: totalPnl,
+          tradesToday: completedTrades.length,
+          winRate,
+          riskUsed: totalRisk,
+        });
+      } catch (error) {
+        console.error(
+          "Unexpected dashboard error:",
+          error
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred."
+        );
+
+        setStats(initialStats);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const trades = (data ?? []) as Trade[];
-
-      const completedTrades = trades.filter(
-        (trade) => trade.status !== "planned"
-      );
-
-      const wins = completedTrades.filter(
-        (trade) => trade.status === "win"
-      ).length;
-
-      const totalPnl = completedTrades.reduce(
-        (total, trade) => total + Number(trade.pnl ?? 0),
-        0
-      );
-
-      const totalRisk = trades.reduce(
-        (total, trade) => total + Number(trade.risk_dollars ?? 0),
-        0
-      );
-
-      const winRate =
-        completedTrades.length > 0
-          ? (wins / completedTrades.length) * 100
-          : 0;
-
-      setStats({
-        pnl: totalPnl,
-        tradesToday: trades.length,
-        winRate,
-        riskUsed: totalRisk,
-      });
-
-      setLoading(false);
     };
 
     loadDashboard();
@@ -114,14 +200,29 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-slate-950 p-8 text-white">
       <div className="mx-auto max-w-7xl space-y-8">
         <div>
-          <h1 className="text-4xl font-bold">Dashboard</h1>
+          <h1 className="text-4xl font-bold">
+            Dashboard
+          </h1>
 
           <p className="mt-2 text-slate-400">
-            Track your daily trading performance and risk.
+            Track your daily trading performance
+            and risk.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        {errorMessage && (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-red-300">
+            <p className="font-semibold">
+              Could not load Dashboard
+            </p>
+
+            <p className="mt-1 text-sm">
+              {errorMessage}
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card
             label="Today's P&L"
             value={
@@ -135,7 +236,11 @@ export default function DashboardPage() {
 
           <Card
             label="Trades Today"
-            value={loading ? "..." : String(stats.tradesToday)}
+            value={
+              loading
+                ? "..."
+                : String(stats.tradesToday)
+            }
           />
 
           <Card
@@ -157,6 +262,23 @@ export default function DashboardPage() {
             }
           />
         </div>
+
+        {!loading &&
+          !errorMessage &&
+          stats.tradesToday === 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <p className="text-slate-300">
+                No completed trades were found for
+                today.
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Planned trades will appear in the
+                statistics after their result is
+                saved.
+              </p>
+            </div>
+          )}
       </div>
     </main>
   );
@@ -177,7 +299,9 @@ function Card({
 }: CardProps) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <p className="text-sm text-slate-400">{label}</p>
+      <p className="text-sm text-slate-400">
+        {label}
+      </p>
 
       <p
         className={`mt-2 text-3xl font-bold ${

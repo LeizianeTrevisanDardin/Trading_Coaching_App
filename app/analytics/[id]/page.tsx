@@ -350,89 +350,340 @@ export default function AnalysisDetailPage() {
   const handleSaveResult = async () => {
     if (!analysis) return;
 
-    setSaving(true);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    const { error } = await supabase
-      .from("trade_screenshots")
-      .update({
-        trade_status: tradeStatus,
-        result_r: resultR
-          ? Number(resultR)
-          : null,
-        pnl: pnl ? Number(pnl) : null,
-        notes,
-      })
-      .eq("id", analysis.id);
-
-    if (error) {
-      console.error(error);
+    if (userError || !user) {
       showDialog(
         "error",
-        "Could Not Save Result",
-        error.message
+        "Sign-In Required",
+        "You need to sign in before saving the trade result."
       );
-      setSaving(false);
+      router.push("/login");
       return;
     }
 
-    if (alreadyInJournal) {
-      const journalStatus =
+    if (
+      tradeStatus !== "winner" &&
+      tradeStatus !== "loser" &&
+      tradeStatus !== "breakeven"
+    ) {
+      showDialog(
+        "warning",
+        "Trade Status Required",
+        "Select Winner, Loser, or Breakeven before saving."
+      );
+      return;
+    }
+
+    if (
+      analysis.direction !== "long" &&
+      analysis.direction !== "short"
+    ) {
+      showDialog(
+        "warning",
+        "Direction Required",
+        "This analysis must have a Long or Short direction."
+      );
+      return;
+    }
+
+    if (
+      analysis.entry_price === null ||
+      analysis.stop_loss === null ||
+      analysis.target_price === null
+    ) {
+      showDialog(
+        "warning",
+        "Trade Prices Required",
+        "Entry price, stop loss, and target price are required."
+      );
+      return;
+    }
+
+    const parsedResultR =
+      resultR.trim() === "" ? null : Number(resultR);
+
+    const parsedPnl =
+      pnl.trim() === "" ? null : Number(pnl);
+
+    if (
+      parsedResultR !== null &&
+      !Number.isFinite(parsedResultR)
+    ) {
+      showDialog(
+        "warning",
+        "Invalid Result in R",
+        "Enter a valid number for Result in R."
+      );
+      return;
+    }
+
+    if (
+      parsedPnl !== null &&
+      !Number.isFinite(parsedPnl)
+    ) {
+      showDialog(
+        "warning",
+        "Invalid P&L",
+        "Enter a valid number for Profit and Loss."
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const normalizedResultR =
+        tradeStatus === "loser"
+          ? parsedResultR === null
+            ? null
+            : -Math.abs(parsedResultR)
+          : tradeStatus === "breakeven"
+          ? 0
+          : parsedResultR === null
+          ? null
+          : Math.abs(parsedResultR);
+
+      const normalizedPnl =
+        tradeStatus === "loser"
+          ? parsedPnl === null
+            ? null
+            : -Math.abs(parsedPnl)
+          : tradeStatus === "breakeven"
+          ? 0
+          : parsedPnl === null
+          ? null
+          : Math.abs(parsedPnl);
+
+      const journalStatus: "win" | "loss" | "breakeven" =
         tradeStatus === "winner"
           ? "win"
           : tradeStatus === "loser"
           ? "loss"
-          : tradeStatus === "breakeven"
-          ? "breakeven"
-          : "planned";
+          : "breakeven";
 
-      const { error: journalError } = await supabase
-        .from("trades")
-        .update({
-          status: journalStatus,
-          result_r: resultR ? Number(resultR) : null,
-          pnl: pnl ? Number(pnl) : null,
-          notes,
-        })
-        .eq("screenshot_id", analysis.id);
+      const entry = Number(analysis.entry_price);
+      const stop = Number(analysis.stop_loss);
+      const target = Number(analysis.target_price);
 
+      const riskPoints = Math.abs(entry - stop);
+      const rewardPoints = Math.abs(target - entry);
 
-      if (journalError) {
-        console.error(
-          "Journal update error:",
-          journalError
-        );
-
+      if (riskPoints <= 0) {
         showDialog(
-          "error",
-          "Journal Update Failed",
-          `The analysis was saved, but the Journal could not be updated: ${journalError.message}`
+          "warning",
+          "Invalid Risk",
+          "Entry price and stop loss cannot be the same."
         );
-
-        setSaving(false);
         return;
       }
+
+      if (analysis.direction === "long" && stop >= entry) {
+        showDialog(
+          "warning",
+          "Invalid Long Setup",
+          "For a Long trade, the stop loss must be below the entry price."
+        );
+        return;
+      }
+
+      if (analysis.direction === "long" && target <= entry) {
+        showDialog(
+          "warning",
+          "Invalid Long Target",
+          "For a Long trade, the target must be above the entry price."
+        );
+        return;
+      }
+
+      if (analysis.direction === "short" && stop <= entry) {
+        showDialog(
+          "warning",
+          "Invalid Short Setup",
+          "For a Short trade, the stop loss must be above the entry price."
+        );
+        return;
+      }
+
+      if (analysis.direction === "short" && target >= entry) {
+        showDialog(
+          "warning",
+          "Invalid Short Target",
+          "For a Short trade, the target must be below the entry price."
+        );
+        return;
+      }
+
+      const symbol =
+        analysis.symbol?.trim().toUpperCase() || "STOCK";
+
+      const contractData =
+        contractSettings[symbol] || {
+          contract: "STOCK" as const,
+          pointValue: 1,
+          tickSize: 0.01,
+        };
+
+      const quantity = 1;
+      const riskReward = rewardPoints / riskPoints;
+      const riskTicks = riskPoints / contractData.tickSize;
+      const riskDollars =
+        riskPoints * contractData.pointValue * quantity;
+      const targetProfit =
+        rewardPoints * contractData.pointValue * quantity;
+
+      const journalNotes = [
+        `Original symbol: ${symbol}`,
+        `AI Score: ${analysis.score ?? 0}/100`,
+        analysis.bot_analysis || "",
+        notes.trim(),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const completedAt = new Date().toISOString();
+
+      const { error: analysisError } = await supabase
+        .from("trade_screenshots")
+        .update({
+          trade_status: tradeStatus,
+          result_r: normalizedResultR,
+          pnl: normalizedPnl,
+          notes: notes.trim() || null,
+        })
+        .eq("id", analysis.id)
+        .eq("user_id", user.id);
+
+      if (analysisError) {
+        console.error("Analysis update error:", analysisError);
+        showDialog(
+          "error",
+          "Could Not Save Analysis",
+          analysisError.message
+        );
+        return;
+      }
+
+      const { data: existingTrade, error: existingTradeError } =
+        await supabase
+          .from("trades")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("screenshot_id", analysis.id)
+          .maybeSingle();
+
+      if (existingTradeError) {
+        console.error("Journal lookup error:", existingTradeError);
+        showDialog(
+          "error",
+          "Could Not Check Journal",
+          existingTradeError.message
+        );
+        return;
+      }
+
+      if (existingTrade) {
+        const { error: updateError } = await supabase
+          .from("trades")
+          .update({
+            status: journalStatus,
+            result_r: normalizedResultR,
+            pnl: normalizedPnl,
+            notes: journalNotes,
+            completed_at: completedAt,
+          })
+          .eq("id", existingTrade.id)
+          .eq("user_id", user.id);
+
+        if (updateError) {
+          console.error("Journal update error:", updateError);
+          showDialog(
+            "error",
+            "Journal Update Failed",
+            updateError.message
+          );
+          return;
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from("trades")
+          .insert({
+            user_id: user.id,
+            screenshot_id: analysis.id,
+            contract: contractData.contract,
+            direction: analysis.direction,
+            entry,
+            stop_loss: stop,
+            take_profit: target,
+            reward: Number(riskReward.toFixed(2)),
+            quantity,
+            risk_points: riskPoints,
+            risk_ticks: riskTicks,
+            risk_dollars: riskDollars,
+            target_profit: targetProfit,
+            status: journalStatus,
+            result_r: normalizedResultR,
+            pnl: normalizedPnl,
+            notes: journalNotes,
+            completed_at: completedAt,
+          });
+
+        if (insertError) {
+          console.error("Journal insert error:", insertError);
+          showDialog(
+            "error",
+            "Could Not Add to Journal",
+            insertError.message
+          );
+          return;
+        }
+      }
+
+      setAnalysis((current) =>
+        current
+          ? {
+              ...current,
+              trade_status: tradeStatus,
+              result_r: normalizedResultR,
+              pnl: normalizedPnl,
+              notes: notes.trim() || null,
+            }
+          : current
+      );
+
+      setResultR(
+        normalizedResultR === null
+          ? ""
+          : String(normalizedResultR)
+      );
+      setPnl(
+        normalizedPnl === null ? "" : String(normalizedPnl)
+      );
+      setAlreadyInJournal(true);
+
+      showDialog(
+        "success",
+        "Trade Result Saved",
+        "The result was saved and synchronized with the Journal and Dashboard."
+      );
+
+      router.refresh();
+    } catch (error) {
+      console.error("Unexpected save error:", error);
+
+      showDialog(
+        "error",
+        "Could Not Save Result",
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred."
+      );
+    } finally {
+      setSaving(false);
     }
-
-    setAnalysis((current) =>
-      current
-        ? {
-            ...current,
-            trade_status: tradeStatus,
-            result_r: resultR
-              ? Number(resultR)
-              : null,
-            pnl: pnl ? Number(pnl) : null,
-            notes,
-          }
-        : current
-    );
-
-    showDialog(
-      "success",
-      "Trade Updated",
-      "The trade result was saved successfully."
-    );
-    setSaving(false);
   };
 
   const handleDelete = async () => {
@@ -673,8 +924,7 @@ export default function AnalysisDetailPage() {
 
           {!alreadyInJournal && (
             <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-200">
-              Add this analysis to the Journal so
-              future results can be synchronized.
+              Saving the result will automatically add this analysis to the Journal.
             </div>
           )}
 
