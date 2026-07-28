@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 
 type TradeStatus =
   | "planned"
-  | "winner"
+  | "win"
   | "loss"
   | "breakeven";
 
 type Trade = {
   status: TradeStatus | null;
-  profit_loss: number | null;
+  pnl: number | null;
   risk_dollars: number | null;
   created_at: string;
 };
@@ -39,9 +39,13 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true);
 
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
+
   useEffect(() => {
     const loadDashboard = async () => {
       setLoading(true);
+      setErrorMessage(null);
 
       try {
         const {
@@ -49,7 +53,21 @@ export default function DashboardPage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError || !user) {
+        if (userError) {
+          console.error(
+            "Dashboard user error:",
+            userError.message,
+            userError
+          );
+
+          setErrorMessage(
+            "Could not verify the signed-in user."
+          );
+
+          return;
+        }
+
+        if (!user) {
           router.push("/login");
           return;
         }
@@ -79,12 +97,7 @@ export default function DashboardPage() {
         const { data, error } = await supabase
           .from("trades")
           .select(
-            `
-              status,
-              profit_loss,
-              risk_dollars,
-              created_at
-            `
+            "status, pnl, risk_dollars, created_at"
           )
           .eq("user_id", user.id)
           .gte(
@@ -102,10 +115,20 @@ export default function DashboardPage() {
         if (error) {
           console.error(
             "Dashboard load error:",
+            error.message,
+            error.details,
+            error.hint,
+            error.code,
             error
           );
 
+          setErrorMessage(
+            error.message ||
+              "Could not load dashboard data."
+          );
+
           setStats(initialStats);
+
           return;
         }
 
@@ -113,13 +136,13 @@ export default function DashboardPage() {
 
         const completedTrades = trades.filter(
           (trade) =>
-            trade.status === "winner" ||
+            trade.status === "win" ||
             trade.status === "loss" ||
             trade.status === "breakeven"
         );
 
         const wins = completedTrades.filter(
-          (trade) => trade.status === "winner"
+          (trade) => trade.status === "win"
         ).length;
 
         const losses = completedTrades.filter(
@@ -128,8 +151,7 @@ export default function DashboardPage() {
 
         const totalPnl = completedTrades.reduce(
           (total, trade) =>
-            total +
-            Number(trade.profit_loss ?? 0),
+            total + Number(trade.pnl ?? 0),
           0
         );
 
@@ -140,30 +162,29 @@ export default function DashboardPage() {
           0
         );
 
-        const tradesUsedForWinRate =
-          wins + losses;
+        const winRateTrades = wins + losses;
 
         const winRate =
-          tradesUsedForWinRate > 0
-            ? (wins / tradesUsedForWinRate) *
-              100
+          winRateTrades > 0
+            ? (wins / winRateTrades) * 100
             : 0;
 
         setStats({
           pnl: totalPnl,
-
-          // Conta somente trades concluídos.
           tradesToday: completedTrades.length,
-
           winRate,
-
-          // Soma o risco de todos os trades criados hoje.
           riskUsed: totalRisk,
         });
       } catch (error) {
         console.error(
           "Unexpected dashboard error:",
           error
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred."
         );
 
         setStats(initialStats);
@@ -189,7 +210,19 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        {errorMessage && (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-red-300">
+            <p className="font-semibold">
+              Could not load Dashboard
+            </p>
+
+            <p className="mt-1 text-sm">
+              {errorMessage}
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card
             label="Today's P&L"
             value={
@@ -229,6 +262,23 @@ export default function DashboardPage() {
             }
           />
         </div>
+
+        {!loading &&
+          !errorMessage &&
+          stats.tradesToday === 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <p className="text-slate-300">
+                No completed trades were found for
+                today.
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Planned trades will appear in the
+                statistics after their result is
+                saved.
+              </p>
+            </div>
+          )}
       </div>
     </main>
   );
