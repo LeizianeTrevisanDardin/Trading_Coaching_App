@@ -3,70 +3,171 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter, usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
+import {
+  Menu,
+  Newspaper,
+  RefreshCw,
+  X,
+} from "lucide-react";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
- { href: "/trader-planner", label: "Trade Planner" },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+  },
+  {
+    href: "/market-news",
+    label: "Market News",
+  },
+  {
+    href: "/trader-planner",
+    label: "Trade Planner",
+  },
   {
     href: "/traderbot/screenshot-analysis",
     label: "Screenshot AI",
   },
-  { href: "/playbook", label: "Playbook" },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/journal", label: "Journal" },
-  { href: "/settings", label: "Settings" },
+  {
+    href: "/playbook",
+    label: "Playbook",
+  },
+  {
+    href: "/analytics",
+    label: "Analytics",
+  },
+  {
+    href: "/journal",
+    label: "Journal",
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+  },
 ];
 
 export default function AppNav() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    const loadUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    let componentMounted = true;
 
-      setUser(user);
+    const loadSession = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error(
+            "Unable to load Supabase session:",
+            error.message
+          );
+        }
+
+        if (!componentMounted) {
+          return;
+        }
+
+        setUser(session?.user ?? null);
+      } catch (error) {
+        console.error(
+          "Unexpected authentication error:",
+          error
+        );
+
+        if (componentMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (componentMounted) {
+          setAuthLoading(false);
+        }
+      }
     };
 
-    loadUser();
+    void loadSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!componentMounted) {
+          return;
+        }
 
-    return () => subscription.unsubscribe();
-  }, []);
+        setUser(session?.user ?? null);
+        setAuthLoading(false);
+
+        if (event === "SIGNED_OUT") {
+          setMenuOpen(false);
+        }
+
+        if (
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED"
+        ) {
+          router.refresh();
+        }
+      }
+    );
+
+    return () => {
+      componentMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      alert(error.message);
+    if (loggingOut) {
       return;
     }
 
-    setMenuOpen(false);
-    router.replace("/login");
-    router.refresh();
+    try {
+      setLoggingOut(true);
+
+      const { error } = await supabase.auth.signOut({
+        scope: "local",
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      setUser(null);
+      setMenuOpen(false);
+
+      router.replace("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Logout error:", error);
+
+      alert(
+        "Unable to log out. Please try again."
+      );
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
-  const isActive = (href: string) => {
+  const isActive = (href: string): boolean => {
     if (
       href === "/dashboard" ||
-      href === "/trader-planner"
+      href === "/trader-planner" ||
+      href === "/market-news"
     ) {
       return pathname === href;
     }
@@ -104,22 +205,38 @@ export default function AppNav() {
 
           {/* Desktop navigation */}
           <div className="hidden items-center gap-4 lg:flex">
-            {user &&
-              links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`whitespace-nowrap text-sm transition ${
-                    isActive(link.href)
-                      ? "font-semibold text-blue-400"
-                      : "text-slate-300 hover:text-white"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+            {authLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <RefreshCw className="h-4 w-4 animate-spin" />
 
-            {!user ? (
+                <span>Checking session...</span>
+              </div>
+            ) : null}
+
+            {!authLoading &&
+              user &&
+              links.map((link) => {
+                const active = isActive(link.href);
+
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={
+                      active ? "page" : undefined
+                    }
+                    className={`whitespace-nowrap text-sm transition ${
+                      active
+                        ? "font-semibold text-blue-400"
+                        : "text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+
+            {!authLoading && !user ? (
               <>
                 <Link
                   href="/login"
@@ -135,58 +252,96 @@ export default function AppNav() {
                   Sign Up
                 </Link>
               </>
-            ) : (
+            ) : null}
+
+            {!authLoading && user ? (
               <>
                 <span
                   className="max-w-40 truncate text-sm text-slate-400"
-                  title={user.email}
+                  title={user.email ?? ""}
                 >
                   {user.email}
                 </span>
 
                 <button
                   type="button"
-                  onClick={handleLogout}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white transition hover:bg-red-700"
+                  onClick={() => void handleLogout()}
+                  disabled={loggingOut}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Logout
+                  {loggingOut
+                    ? "Logging out..."
+                    : "Logout"}
                 </button>
               </>
-            )}
+            ) : null}
           </div>
 
           {/* Mobile menu button */}
           <button
             type="button"
-            onClick={() => setMenuOpen((current) => !current)}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            onClick={() =>
+              setMenuOpen((current) => !current)
+            }
+            aria-label={
+              menuOpen ? "Close menu" : "Open menu"
+            }
             aria-expanded={menuOpen}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-700 text-slate-200 transition hover:bg-slate-800 lg:hidden"
           >
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            {menuOpen ? (
+              <X size={22} />
+            ) : (
+              <Menu size={22} />
+            )}
           </button>
         </div>
 
         {/* Mobile navigation */}
-        {menuOpen && (
+        {menuOpen ? (
           <div className="border-t border-slate-800 py-4 lg:hidden">
             <div className="flex flex-col gap-2">
-              {user &&
-                links.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`rounded-lg px-3 py-3 text-sm transition ${
-                      isActive(link.href)
-                        ? "bg-blue-600/15 font-semibold text-blue-400"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
+              {authLoading ? (
+                <div className="flex items-center gap-2 rounded-lg px-3 py-3 text-sm text-slate-400">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
 
-              {!user ? (
+                  <span>Checking session...</span>
+                </div>
+              ) : null}
+
+              {!authLoading &&
+                user &&
+                links.map((link) => {
+                  const active = isActive(
+                    link.href
+                  );
+
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      aria-current={
+                        active ? "page" : undefined
+                      }
+                      className={`rounded-lg px-3 py-3 text-sm transition ${
+                        active
+                          ? "bg-blue-600/15 font-semibold text-blue-400"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {link.href ===
+                        "/market-news" ? (
+                          <Newspaper className="h-4 w-4" />
+                        ) : null}
+
+                        {link.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+
+              {!authLoading && !user ? (
                 <div className="mt-2 grid grid-cols-2 gap-3">
                   <Link
                     href="/login"
@@ -202,7 +357,9 @@ export default function AppNav() {
                     Sign Up
                   </Link>
                 </div>
-              ) : (
+              ) : null}
+
+              {!authLoading && user ? (
                 <div className="mt-3 border-t border-slate-800 pt-4">
                   <p className="mb-3 truncate px-3 text-sm text-slate-400">
                     {user.email}
@@ -210,16 +367,21 @@ export default function AppNav() {
 
                   <button
                     type="button"
-                    onClick={handleLogout}
-                    className="w-full rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+                    onClick={() =>
+                      void handleLogout()
+                    }
+                    disabled={loggingOut}
+                    className="w-full rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Logout
+                    {loggingOut
+                      ? "Logging out..."
+                      : "Logout"}
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </nav>
   );
