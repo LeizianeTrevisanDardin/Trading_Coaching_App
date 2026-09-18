@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import {
   FunctionsFetchError,
@@ -140,6 +141,7 @@ export default function ScreenshotAnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] =
     useState<GeminiTradeAnalysis | null>(null);
+  const [aiAnalysisInputKey, setAiAnalysisInputKey] = useState<string | null>(null);
   const [aiRiskReward, setAiRiskReward] = useState<number | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [extracting, setExtracting] = useState(false);
@@ -168,16 +170,7 @@ export default function ScreenshotAnalysisPage() {
     checkUser();
   }, [router]);
 
-  useEffect(() => {
-    setExtraction(null);
-    setExtractionError("");
-  }, [file]);
-
-  useEffect(() => {
-    setAiAnalysis(null);
-    setAiRiskReward(null);
-    setAnalysisError("");
-  }, [
+  const analysisInputKey = [
     file,
     symbol,
     timeframe,
@@ -192,7 +185,7 @@ export default function ScreenshotAnalysisPage() {
     entryPrice,
     stopLoss,
     targetPrice,
-  ]);
+  ].map(String).join("|");
 
   const localAnalysis = useMemo(() => {
     let score = 0;
@@ -539,7 +532,7 @@ export default function ScreenshotAnalysisPage() {
     targetPrice,
   ]);
 
-  const displayAnalysis = aiAnalysis
+  const displayAnalysis = aiAnalysis && aiAnalysisInputKey === analysisInputKey
     ? {
         ...localAnalysis,
         score: aiAnalysis.score,
@@ -720,6 +713,12 @@ export default function ScreenshotAnalysisPage() {
     }
   };
 
+  const handleFileChange = (nextFile: File | null) => {
+    setFile(nextFile);
+    setExtraction(null);
+    setExtractionError("");
+  };
+
   const handleAnalyzeTrade = async () => {
     setAnalysisError("");
     setAiAnalysis(null);
@@ -832,6 +831,7 @@ if (!data?.analysis) {
 
 setAiAnalysis(data.analysis);
 setAiRiskReward(data.calculations?.riskReward ?? null);
+setAiAnalysisInputKey(analysisInputKey);
 } catch (error) {
   const message =
     error instanceof Error
@@ -990,7 +990,7 @@ setAiRiskReward(data.calculations?.riskReward ?? null);
                 type="file"
                 accept="image/*"
                 onChange={(e) =>
-                  setFile(e.target.files?.[0] || null)
+                  handleFileChange(e.target.files?.[0] || null)
                 }
                 className="w-full text-sm text-gray-300"
               />
@@ -1286,7 +1286,7 @@ setAiRiskReward(data.calculations?.riskReward ?? null);
             >
               {analyzing
                 ? "TraderBot is analyzing..."
-                : "🤖 Analyze Trade"}
+                : "Analyze Trade"}
             </button>
 
             <button
@@ -1297,7 +1297,7 @@ setAiRiskReward(data.calculations?.riskReward ?? null);
             >
               {loading
                 ? "Saving Analysis..."
-                : "💾 Save Analysis"}
+                : "Save Analysis"}
             </button>
           </div>
 
@@ -1328,7 +1328,7 @@ setAiRiskReward(data.calculations?.riskReward ?? null);
               </p>
 
               <p className="mt-1 font-semibold text-blue-400">
-                📌 Setup Type: {displayAnalysis.setupType}
+                 Setup Type: {displayAnalysis.setupType}
               </p>
 
               <p className="mt-2 font-semibold text-purple-400">
@@ -1342,7 +1342,7 @@ setAiRiskReward(data.calculations?.riskReward ?? null);
               {displayAnalysis.managementAdvice && (
                 <div className="mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4">
                   <h3 className="font-bold text-orange-300">
-                    🛡️ Trade Management
+                     Trade Management
                   </h3>
 
                   <p className="mt-2 leading-relaxed text-orange-100">
@@ -1471,10 +1471,13 @@ setAiRiskReward(data.calculations?.riskReward ?? null);
             )}
 
             {file && (
-              <img
+              <Image
                 src={URL.createObjectURL(file)}
                 alt="Uploaded trading chart"
-                className="mt-4 w-full rounded-xl border border-gray-700"
+                width={1200}
+                height={800}
+                unoptimized
+                className="mt-4 h-auto w-full rounded-xl border border-gray-700"
               />
             )}
           </div>

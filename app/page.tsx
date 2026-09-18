@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Bot,
   Calculator,
   ChartNoAxesCombined,
   ClipboardCheck,
@@ -57,7 +56,7 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:items-center lg:px-10 lg:py-28">
           <div>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300">
-              <Bot size={18} />
+            
               Trading Planner and AI Coaching Platform
             </div>
 
@@ -96,7 +95,6 @@ export default function HomePage() {
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600/20 text-blue-400">
-                  <Bot size={26} />
                 </div>
 
                 <div>

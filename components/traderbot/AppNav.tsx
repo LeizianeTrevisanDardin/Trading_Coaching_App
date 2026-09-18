@@ -126,10 +126,6 @@ export default function AppNav() {
     };
   }, [router]);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
   const handleLogout = async () => {
     if (loggingOut) {
       return;
@@ -188,9 +184,7 @@ export default function AppNav() {
             aria-label="TraderBot AI Home"
             className="flex min-w-0 items-center gap-2 transition hover:opacity-90"
           >
-            <span className="shrink-0 text-2xl sm:text-3xl">
-              🤖
-            </span>
+
 
             <h1 className="leading-tight font-bold text-white transition hover:text-blue-400">
               <span className="block text-lg sm:hidden">
@@ -320,6 +314,7 @@ export default function AppNav() {
                     <Link
                       key={link.href}
                       href={link.href}
+                      onClick={() => setMenuOpen(false)}
                       aria-current={
                         active ? "page" : undefined
                       }
